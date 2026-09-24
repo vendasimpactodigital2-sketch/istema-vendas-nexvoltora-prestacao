@@ -5,6 +5,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { MobileNav } from './components/layout/MobileNav';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { ToastContainer } from './components/common/Toast';
+import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
 import { LoginView } from './components/auth/LoginView';
 import { SubscriptionBlockedView } from './components/subscription/SubscriptionBlockedView';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -30,6 +31,8 @@ const MainLayout: React.FC = () => {
     currentUser,
     setCurrentUser,
     subscriptionInfo,
+    isLogoutModalOpen,
+    closeLogoutModal,
   } = useApp();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isVerifyingSupabase, setIsVerifyingSupabase] = useState(false);
@@ -339,6 +342,7 @@ const MainLayout: React.FC = () => {
       </div>
 
       <GlobalSearchModal />
+      <LogoutConfirmModal isOpen={isLogoutModalOpen} onClose={closeLogoutModal} />
       <ToastContainer />
     </div>
   );

@@ -33,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
     sidebarCollapsed,
     setSidebarCollapsed,
     logout,
+    openLogoutModal,
     expiringClientsCount,
   } = useApp();
 
@@ -215,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
           )}
 
           <button
-            onClick={logout}
+            onClick={openLogoutModal}
             title={sidebarCollapsed ? 'Sair' : undefined}
             className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors ${
               sidebarCollapsed ? 'justify-center px-0' : ''

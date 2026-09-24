@@ -79,6 +79,12 @@ import {
   saveCompanyToSupabase,
   fetchUsersFromSupabase,
 } from '../lib/supabaseClient';
+import {
+  generateBackupData,
+  downloadBackupFile,
+  parseAndValidateBackupFile,
+  restoreBackupToSupabase,
+} from '../lib/backupService';
 
 export interface ToastMessage {
   id: string;
@@ -232,6 +238,24 @@ interface AppContextType {
 
   // Reset
   resetToDemoData: () => void;
+
+  // Backup & Restauração vinculados ao Supabase
+  exportFullBackup: () => string;
+  restoreFullBackup: (file: File) => Promise<{
+    success: boolean;
+    counts: {
+      clients: number;
+      quotes: number;
+      appointments: number;
+      projects: number;
+      financialEntries: number;
+      financialExpenses: number;
+    };
+    filename: string;
+  }>;
+  isLogoutModalOpen: boolean;
+  openLogoutModal: () => void;
+  closeLogoutModal: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1485,6 +1509,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Dados demonstrativos restaurados com sucesso!', 'success');
   };
 
+  // Modal de Confirmação de Logout com Backup
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const openLogoutModal = () => setIsLogoutModalOpen(true);
+  const closeLogoutModal = () => setIsLogoutModalOpen(false);
+
+  // 1. Exportação / Backup Completo
+  const exportFullBackup = (): string => {
+    const backupData = generateBackupData({
+      company,
+      clients,
+      quotes,
+      appointments,
+      projects,
+      financialEntries,
+      financialExpenses,
+      monthlyGoals,
+      currentUser,
+    });
+    return downloadBackupFile(backupData);
+  };
+
+  // 2. Importação / Restauração vinculando ao usuário logado e Supabase
+  const restoreFullBackup = async (file: File) => {
+    const validated = await parseAndValidateBackupFile(file);
+    const targetUserId = currentUser?.id || 'usr_default';
+    const targetCompanyId = company.id || validated.company_id || 'comp_ozi_01';
+
+    // Salva/insere tudo no banco de dados do Supabase com o user_id do usuário atual
+    const { successCount, errors } = await restoreBackupToSupabase(validated, targetUserId, targetCompanyId);
+
+    // Atualiza estados locais e localStorage
+    if (validated.company && validated.company.trade_name) {
+      const mergedCompany = { ...company, ...validated.company, id: targetCompanyId };
+      setCompany(mergedCompany);
+      saveToStorage('company', mergedCompany);
+    }
+
+    if (validated.clients && validated.clients.length > 0) {
+      setClients((prev) => {
+        const map = new Map<string, Client>();
+        prev.forEach((c) => map.set(c.id, c));
+        validated.clients!.forEach((c) => {
+          map.set(c.id, { ...c, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('clients', updated);
+        return updated;
+      });
+    }
+
+    if (validated.quotes && validated.quotes.length > 0) {
+      setQuotes((prev) => {
+        const map = new Map<string, Quote>();
+        prev.forEach((q) => map.set(q.id, q));
+        validated.quotes!.forEach((q) => {
+          map.set(q.id, { ...q, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('quotes', updated);
+        return updated;
+      });
+    }
+
+    if (validated.appointments && validated.appointments.length > 0) {
+      setAppointments((prev) => {
+        const map = new Map<string, Appointment>();
+        prev.forEach((a) => map.set(a.id, a));
+        validated.appointments!.forEach((a) => {
+          map.set(a.id, { ...a, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('appointments', updated);
+        return updated;
+      });
+    }
+
+    if (validated.projects && validated.projects.length > 0) {
+      setProjects((prev) => {
+        const map = new Map<string, Project>();
+        prev.forEach((p) => map.set(p.id, p));
+        validated.projects!.forEach((p) => {
+          map.set(p.id, { ...p, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('projects', updated);
+        return updated;
+      });
+    }
+
+    if (validated.financialEntries && validated.financialEntries.length > 0) {
+      setFinancialEntries((prev) => {
+        const map = new Map<string, FinancialEntry>();
+        prev.forEach((fe) => map.set(fe.id, fe));
+        validated.financialEntries!.forEach((fe) => {
+          map.set(fe.id, { ...fe, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('entries', updated);
+        return updated;
+      });
+    }
+
+    if (validated.financialExpenses && validated.financialExpenses.length > 0) {
+      setFinancialExpenses((prev) => {
+        const map = new Map<string, FinancialExpense>();
+        prev.forEach((ex) => map.set(ex.id, ex));
+        validated.financialExpenses!.forEach((ex) => {
+          map.set(ex.id, { ...ex, company_id: targetCompanyId, user_id: targetUserId });
+        });
+        const updated = Array.from(map.values());
+        saveToStorage('expenses', updated);
+        return updated;
+      });
+    }
+
+    return {
+      success: true,
+      counts: successCount,
+      filename: file.name,
+    };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1591,6 +1737,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast,
         removeToast,
         resetToDemoData,
+        exportFullBackup,
+        restoreFullBackup,
+        isLogoutModalOpen,
+        openLogoutModal,
+        closeLogoutModal,
       }}
     >
       {children}

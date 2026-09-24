@@ -23,6 +23,14 @@ import {
   Clock,
   Sparkles,
   Zap,
+  Download,
+  FileText,
+  AlertCircle,
+  Users,
+  HardHat,
+  CalendarCheck,
+  WalletCards,
+  FileUp,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -30,6 +38,8 @@ import {
   getSupabase,
   SUPABASE_SQL_SCHEMA,
 } from '../../lib/supabaseClient';
+import { parseAndValidateBackupFile } from '../../lib/backupService';
+import { SystemBackupData } from '../../types';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -42,6 +52,15 @@ export const SettingsView: React.FC = () => {
     subscriptionInfo,
     setActiveTab,
     expiringClientsCount,
+    exportFullBackup,
+    restoreFullBackup,
+    clients,
+    quotes,
+    projects,
+    appointments,
+    financialEntries,
+    financialExpenses,
+    addToast,
   } = useApp();
 
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
@@ -50,6 +69,14 @@ export const SettingsView: React.FC = () => {
 
   const [isRenewingTrial, setIsRenewingTrial] = useState(false);
   const [isActivatingDirect, setIsActivatingDirect] = useState(false);
+
+  // Estados para Backup e Restauração
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [selectedBackupFile, setSelectedBackupFile] = useState<File | null>(null);
+  const [backupPreview, setBackupPreview] = useState<SystemBackupData | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     trade_name: company.trade_name,
@@ -150,6 +177,68 @@ export const SettingsView: React.FC = () => {
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 3000);
+  };
+
+  // Funções de Backup e Restauração
+  const handleExportBackup = () => {
+    setIsExportingBackup(true);
+    try {
+      const filename = exportFullBackup();
+      addToast(`Backup completo gerado: ${filename}`, 'success');
+    } catch (err: any) {
+      addToast('Erro ao exportar backup: ' + (err?.message || 'Falha'), 'error');
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleBackupFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setRestoreError(null);
+    setRestoreSuccessMsg(null);
+    setSelectedBackupFile(file);
+
+    try {
+      const preview = await parseAndValidateBackupFile(file);
+      setBackupPreview(preview);
+    } catch (err: any) {
+      setBackupPreview(null);
+      setRestoreError(err?.message || 'Arquivo corrompido ou formato não reconhecido.');
+      addToast(err?.message || 'Arquivo inválido.', 'error');
+    }
+  };
+
+  const handleExecuteRestore = async () => {
+    if (!selectedBackupFile) return;
+
+    setIsRestoringBackup(true);
+    setRestoreError(null);
+    setRestoreSuccessMsg(null);
+
+    try {
+      const res = await restoreFullBackup(selectedBackupFile);
+      const parts = [
+        `${res.counts.clients} clientes`,
+        `${res.counts.quotes} orçamentos`,
+        `${res.counts.projects} obras`,
+        `${res.counts.appointments} agendamentos`,
+        `${res.counts.financialEntries + res.counts.financialExpenses} lançamentos financeiros`,
+      ];
+      setRestoreSuccessMsg(
+        `Backup restaurado com sucesso! Os registros (${parts.join(', ')}) foram salvos e vinculados ao seu usuário logado no Supabase.`
+      );
+      addToast('Backup restaurado e vinculado com sucesso no Supabase!', 'success');
+      setSelectedBackupFile(null);
+      setBackupPreview(null);
+    } catch (err: any) {
+      const msg = err?.message || 'Erro inesperado ao restaurar dados do backup.';
+      setRestoreError(msg);
+      addToast(msg, 'error');
+    } finally {
+      setIsRestoringBackup(false);
+    }
   };
 
   return (
@@ -408,6 +497,193 @@ export const SettingsView: React.FC = () => {
             </button>
           </div>
         )}
+      </div>
+
+      {/* SISTEMA DE BACKUP E RESTAURAÇÃO DE DADOS (VINCULADO AO SUPABASE) */}
+      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xs">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>Backup e Restauração de Dados</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800 font-bold">
+                  Supabase Nuvem
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Exporte cópias completas de segurança em formato JSON ou restaure backups salvando tudo diretamente no Supabase.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Grid com as duas funções: Exportação e Restauração */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 1. FUNÇÃO DE EXPORTAÇÃO (BACKUP COMPLETO) */}
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                  <Download className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    1. Exportação (Backup Completo)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Gera um arquivo estruturado JSON para download imediato
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Coleta todos os registros da sua conta (clientes, orçamentos, vendas, obras, agenda e financeiro) e gera um arquivo seguro para guardar no seu computador ou celular.
+              </p>
+
+              {/* Badges de Contagem Atual */}
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="font-semibold">{clients?.length || 0}</span> clientes
+                </div>
+                <div className="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  <FileText className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span className="font-semibold">{quotes?.length || 0}</span> orçamentos
+                </div>
+                <div className="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  <HardHat className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span className="font-semibold">{projects?.length || 0}</span> obras
+                </div>
+                <div className="flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  <CalendarCheck className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                  <span className="font-semibold">{appointments?.length || 0}</span> agendamentos
+                </div>
+                <div className="col-span-2 flex items-center gap-1.5 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  <WalletCards className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                  <span className="font-semibold">{(financialEntries?.length || 0) + (financialExpenses?.length || 0)}</span> lançamentos financeiros
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              disabled={isExportingBackup}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isExportingBackup ? 'Gerando Arquivo...' : 'Baixar Backup Completo (.json)'}</span>
+            </button>
+          </div>
+
+          {/* 2. FUNÇÃO DE IMPORTAÇÃO/RESTAURAÇÃO (SUBIR BACKUP) */}
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    2. Restauração (Subir Backup)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Importa o arquivo JSON e vincula ao seu usuário no Supabase
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Envie o arquivo de backup baixado anteriormente. O sistema lerá cada registro, atribuirá o <strong>user_id</strong> da sua conta atual e salvará tudo no banco de dados do Supabase.
+              </p>
+
+              {/* Mensagem de Erro de Arquivo */}
+              {restoreError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <p>{restoreError}</p>
+                </div>
+              )}
+
+              {/* Mensagem de Sucesso */}
+              {restoreSuccessMsg && (
+                <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  <p>{restoreSuccessMsg}</p>
+                </div>
+              )}
+
+              {/* Preview do Arquivo Selecionado */}
+              {backupPreview && (
+                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center justify-between font-bold text-emerald-300">
+                    <span>Arquivo Válido: {selectedBackupFile?.name}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-500 text-slate-950">Pronto</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Exportado em: {new Date(backupPreview.exported_at).toLocaleString('pt-BR')}
+                  </p>
+                  <div className="text-[11px] text-emerald-400 font-medium">
+                    ✓ {backupPreview.counts?.clients ?? 0} clientes • {backupPreview.counts?.quotes ?? 0} orçamentos • {backupPreview.counts?.projects ?? 0} obras • {backupPreview.counts?.appointments ?? 0} agendamentos
+                  </div>
+                </div>
+              )}
+
+              {/* Input de Upload do Arquivo JSON */}
+              <div className="relative">
+                <input
+                  type="file"
+                  id="backup-file-upload"
+                  accept=".json,application/json"
+                  onChange={handleBackupFileSelect}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="backup-file-upload"
+                  className="w-full flex flex-col items-center justify-center p-3.5 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-slate-900/60 cursor-pointer transition-colors text-center"
+                >
+                  <FileUp className="w-6 h-6 text-slate-400 mb-1" />
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    {selectedBackupFile ? selectedBackupFile.name : 'Clique para selecionar o arquivo .json de backup'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Suporta arquivos gerados pelo sistema (ex: backup_dados_*.json)
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Botão de Confirmação da Restauração */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleExecuteRestore}
+                disabled={!selectedBackupFile || !backupPreview || isRestoringBackup}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRestoringBackup ? 'animate-spin' : ''}`} />
+                <span>{isRestoringBackup ? 'Restaurando no Supabase...' : 'Restaurar Dados no Supabase'}</span>
+              </button>
+
+              {selectedBackupFile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBackupFile(null);
+                    setBackupPreview(null);
+                    setRestoreError(null);
+                  }}
+                  className="px-3 py-2.5 rounded-xl text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">

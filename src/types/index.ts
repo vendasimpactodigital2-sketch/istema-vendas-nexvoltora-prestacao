@@ -55,6 +55,7 @@ export interface User {
 export interface Client {
   id: string;
   company_id: string;
+  user_id?: string;
   name: string;
   document: string; // CPF ou CNPJ
   phone: string;
@@ -116,6 +117,7 @@ export interface Quote {
   id: string;
   code: string; // e.g. ORC-2025-001
   company_id: string;
+  user_id?: string;
   client_id: string;
   client_name: string;
   client_phone: string;
@@ -155,6 +157,7 @@ export type AppointmentStatus =
 export interface Appointment {
   id: string;
   company_id: string;
+  user_id?: string;
   client_id?: string;
   client_name: string;
   phone: string;
@@ -237,6 +240,7 @@ export interface Project {
   code: string; // e.g. OBR-2025-001
   name: string; // Nome da obra ou serviço
   company_id: string;
+  user_id?: string;
   quote_id?: string;
   client_id: string;
   client_name: string;
@@ -268,6 +272,7 @@ export type PaymentStatus = FinancialStatus;
 export interface FinancialEntry {
   id: string;
   company_id: string;
+  user_id?: string;
   project_id?: string;
   project_title?: string;
   client_id?: string;
@@ -294,6 +299,7 @@ export type ExpenseCategory =
 export interface FinancialExpense {
   id: string;
   company_id: string;
+  user_id?: string;
   project_id?: string;
   project_title?: string;
   category: ExpenseCategory;
@@ -328,3 +334,28 @@ export type ActiveTab =
   | 'reports'
   | 'settings'
   | 'master-admin';
+
+export interface SystemBackupData {
+  backup_version: string;
+  exported_at: string;
+  company_id: string;
+  user_id?: string;
+  user_email?: string;
+  system: string;
+  company?: Company;
+  clients?: Client[];
+  quotes?: Quote[];
+  appointments?: Appointment[];
+  projects?: Project[];
+  financialEntries?: FinancialEntry[];
+  financialExpenses?: FinancialExpense[];
+  monthlyGoals?: Record<string, MonthlyGoal>;
+  counts?: {
+    clients: number;
+    quotes: number;
+    appointments: number;
+    projects: number;
+    financialEntries: number;
+    financialExpenses: number;
+  };
+}

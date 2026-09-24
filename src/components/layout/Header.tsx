@@ -34,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
     company,
     currentUser,
     logout,
+    openLogoutModal,
     darkMode,
     toggleDarkMode,
     notifications,
@@ -429,7 +430,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                 <button
                   onClick={() => {
                     setShowUserMenu(false);
-                    logout();
+                    openLogoutModal();
                   }}
                   className="w-full px-4 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2.5"
                 >
