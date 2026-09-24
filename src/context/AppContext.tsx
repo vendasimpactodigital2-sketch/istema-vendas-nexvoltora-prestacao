@@ -14,6 +14,7 @@ import {
   ProjectTask,
   ProjectPhoto,
   MonthlyGoal,
+  UserRole,
 } from '../types';
 import {
   INITIAL_COMPANY,
@@ -32,22 +33,52 @@ import {
 } from '../lib/storage';
 import { generateId } from '../lib/utils';
 import {
-  auth,
-  signInWithEmail,
-  registerWithEmail,
-  signInWithGoogle,
-  logoutUser,
-  sendPasswordReset,
-  onAuthStateChanged,
-  syncUserProfileToFirestore,
-  evaluateSubscription,
-  verifyUserSubscriptionInFirestore,
-  activateUserSubscription,
-  type SubscriptionStatusInfo,
+  getSupabase,
+  isSupabaseConnected,
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  signInWithSupabase,
+  signUpWithSupabase,
+  signInWithGoogleOAuth,
+  sendSupabasePasswordReset,
+  signOutSupabase,
+  verifyUserSubscriptionInSupabase,
+  activateUserSubscriptionInSupabase,
+  syncUserProfileToSupabase,
   calculateTrialEndsAt,
-  type FirebaseUser,
-} from '../lib/firebase';
-import { UserRole } from '../types';
+  calculateTrialEndDates,
+  renewUserTrialInSupabase,
+  extendUserTrialInSupabase,
+  activateUserInSupabaseAdmin,
+  blockUserInSupabaseAdmin,
+  fetchAllPlatformUsersFromSupabase,
+  calculateExpirationMetrics,
+  isTrialActive,
+  evaluateSubscription,
+  type SubscriptionStatusInfo,
+  type SupabaseUser,
+  fetchClientsFromSupabase,
+  saveClientToSupabase,
+  deleteClientFromSupabase,
+  fetchQuotesFromSupabase,
+  saveQuoteToSupabase,
+  deleteQuoteFromSupabase,
+  fetchAppointmentsFromSupabase,
+  saveAppointmentToSupabase,
+  deleteAppointmentFromSupabase,
+  fetchProjectsFromSupabase,
+  saveProjectToSupabase,
+  deleteProjectFromSupabase,
+  fetchFinancialEntriesFromSupabase,
+  saveFinancialEntryToSupabase,
+  deleteFinancialEntryFromSupabase,
+  fetchFinancialExpensesFromSupabase,
+  saveFinancialExpenseToSupabase,
+  deleteFinancialExpenseFromSupabase,
+  fetchCompanyFromSupabase,
+  saveCompanyToSupabase,
+  fetchUsersFromSupabase,
+} from '../lib/supabaseClient';
 
 export interface ToastMessage {
   id: string;
@@ -63,7 +94,21 @@ interface AppContextType {
   setIsAuthenticated: (auth: boolean) => void;
   login: (email: string, role?: string) => boolean;
   logout: () => void;
-  firebaseUser: FirebaseUser | null;
+
+  // Supabase Auth & Session
+  supabaseUser: SupabaseUser | null;
+  supabaseConnected: boolean;
+  loginWithSupabaseEmail: (email: string, password: string) => Promise<User>;
+  registerWithSupabaseEmail: (
+    email: string,
+    password: string,
+    extra: { name: string; role: UserRole; phone?: string; whatsapp?: string }
+  ) => Promise<User>;
+  loginWithSupabaseGoogle: () => Promise<void>;
+  resetSupabasePassword: (email: string) => Promise<void>;
+
+  // Backwards compatibility aliases
+  firebaseUser: SupabaseUser | null;
   firebaseConnected: boolean;
   loginWithFirebaseEmail: (email: string, password: string) => Promise<User>;
   registerWithFirebaseEmail: (
@@ -71,14 +116,22 @@ interface AppContextType {
     password: string,
     extra: { name: string; role: UserRole; phone?: string; whatsapp?: string }
   ) => Promise<User>;
-  loginWithFirebaseGoogle: () => Promise<User>;
+  loginWithFirebaseGoogle: () => Promise<void>;
   resetFirebasePassword: (email: string) => Promise<void>;
 
   // Subscription & 15-Day Trial Control
   subscriptionInfo: SubscriptionStatusInfo;
   isSubscriptionBlocked: boolean;
   activateSubscription: () => Promise<void>;
+  renewTrial15Days: (targetUser?: User) => Promise<User | null>;
   setSubscriptionForTesting: (status: 'trial' | 'active' | 'expired', trialEndsAt?: string) => void;
+
+  // Master Admin: Subscription & Expiration Monitoring
+  expiringClientsCount: number;
+  extendUserSubscription: (userId: string, additionalDays: number) => Promise<void>;
+  activateUserSubscriptionAdmin: (userId: string) => Promise<void>;
+  blockUserSubscriptionAdmin: (userId: string) => Promise<void>;
+  refreshUsersFromSupabase: () => Promise<void>;
 
   // Company
   company: Company;
@@ -98,95 +151,103 @@ interface AppContextType {
   // Data
   users: User[];
   addUser: (u: Omit<User, 'id' | 'created_at'>) => User;
-  updateUser: (id: string, u: Partial<User>) => void;
+  updateUser: (id: string, updates: Partial<User>) => void;
   deleteUser: (id: string) => void;
 
   clients: Client[];
   addClient: (c: Omit<Client, 'id' | 'created_at'>) => Client;
-  updateClient: (id: string, c: Partial<Client>) => void;
+  updateClient: (id: string, updates: Partial<Client>) => void;
   deleteClient: (id: string) => void;
 
   quotes: Quote[];
   addQuote: (q: Omit<Quote, 'id' | 'created_at' | 'code'>) => Quote;
-  updateQuote: (id: string, q: Partial<Quote>) => void;
+  updateQuote: (id: string, updates: Partial<Quote>) => void;
   deleteQuote: (id: string) => void;
   approveQuote: (id: string) => void;
   rejectQuote: (id: string) => void;
-  duplicateQuote: (id: string) => void;
+  duplicateQuote: (id: string) => Quote;
   convertToProject: (quoteId: string) => Project | null;
 
   appointments: Appointment[];
   addAppointment: (a: Omit<Appointment, 'id' | 'created_at'>) => Appointment;
-  updateAppointment: (id: string, a: Partial<Appointment>) => void;
+  updateAppointment: (id: string, updates: Partial<Appointment>) => void;
   deleteAppointment: (id: string) => void;
 
   projects: Project[];
-  addProject: (p: Omit<Project, 'id' | 'created_at' | 'code' | 'tasks' | 'photos'> & { tasks?: ProjectTask[]; photos?: ProjectPhoto[] }) => Project;
-  updateProject: (id: string, p: Partial<Project>) => void;
+  addProject: (
+    p: Omit<Project, 'id' | 'created_at' | 'code' | 'tasks' | 'photos'> & {
+      tasks?: ProjectTask[];
+      photos?: ProjectPhoto[];
+    }
+  ) => Project;
+  updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
   updateProjectProgress: (id: string, progress: number) => void;
   addTaskToProject: (projectId: string, task: Omit<ProjectTask, 'id' | 'project_id'>) => void;
   toggleTaskStatus: (projectId: string, taskId: string) => void;
   deleteTaskFromProject: (projectId: string, taskId: string) => void;
-  addPhotoToProject: (projectId: string, photo: Omit<ProjectPhoto, 'id' | 'project_id' | 'created_at'>) => void;
+  addPhotoToProject: (
+    projectId: string,
+    photo: Omit<ProjectPhoto, 'id' | 'project_id' | 'created_at'>
+  ) => void;
   deletePhotoFromProject: (projectId: string, photoId: string) => void;
 
   financialEntries: FinancialEntry[];
   addFinancialEntry: (e: Omit<FinancialEntry, 'id' | 'created_at'>) => void;
-  updateFinancialEntry: (id: string, e: Partial<FinancialEntry>) => void;
+  updateFinancialEntry: (id: string, updates: Partial<FinancialEntry>) => void;
   deleteFinancialEntry: (id: string) => void;
 
   financialExpenses: FinancialExpense[];
   addFinancialExpense: (e: Omit<FinancialExpense, 'id' | 'created_at'>) => void;
-  updateFinancialExpense: (id: string, e: Partial<FinancialExpense>) => void;
+  updateFinancialExpense: (id: string, updates: Partial<FinancialExpense>) => void;
   deleteFinancialExpense: (id: string) => void;
 
-  // Monthly Goals & Diluted Expenses
   monthlyGoals: Record<string, MonthlyGoal>;
   getMonthlyGoal: (month: string) => MonthlyGoal;
   saveMonthlyGoal: (goal: MonthlyGoal) => void;
 
-  // Notifications
   notifications: AppNotification[];
   markNotificationAsRead: (id: string) => void;
   clearAllNotifications: () => void;
 
-  // Toast
+  // Global Search Modal
+  searchModalOpen: boolean;
+  setSearchModalOpen: (open: boolean) => void;
+  isSearchOpen: boolean;
+  setIsSearchOpen: (open: boolean) => void;
+
+  // Quick Action Modals & Pre-fills
+  openQuickAction: (action: string, prefill?: any) => void;
+  quickActionModal: string | null;
+  closeQuickAction: () => void;
+  pendingAppointmentPrefill: any;
+  setPendingAppointmentPrefill: (prefill: any) => void;
+  pendingQuotePrefill: any;
+  setPendingQuotePrefill: (prefill: any) => void;
+
+  // Toasts
   toasts: ToastMessage[];
   addToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: string) => void;
 
-  // Quick action modals
-  isSearchOpen: boolean;
-  setIsSearchOpen: (open: boolean) => void;
-  quickActionModal: string | null;
-  openQuickAction: (action: string, payload?: any) => void;
-  closeQuickAction: () => void;
-  modalPayload: any;
-  pendingQuotePrefill: any;
-  setPendingQuotePrefill: (payload: any) => void;
-  pendingAppointmentPrefill: any;
-  setPendingAppointmentPrefill: (payload: any) => void;
-
-  // Reset demo data
-  resetDemoData: () => void;
+  // Reset
+  resetToDemoData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Theme state
+  // Theme
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return localStorage.getItem('ozi_theme') === 'dark';
+    return loadFromStorage('dark_mode', false);
   });
 
   useEffect(() => {
+    saveToStorage('dark_mode', darkMode);
     if (darkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('ozi_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('ozi_theme', 'light');
     }
   }, [darkMode]);
 
@@ -195,6 +256,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  // Toasts
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = generateId('toast');
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   // Company profile
   const [company, setCompany] = useState<Company>(() => {
@@ -210,6 +286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCompany((prev) => {
       const updated = { ...prev, ...updates };
       saveToStorage('company', updated);
+      saveCompanyToSupabase(updated);
       return updated;
     });
     addToast('Dados da empresa atualizados com sucesso!', 'success');
@@ -220,74 +297,145 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage('users', INITIAL_USERS)
   );
 
-  // Firebase Authentication & Session State
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [firebaseConnected, setFirebaseConnected] = useState<boolean>(true);
+  // Supabase Authentication & Session State
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const [supabaseConnected, setSupabaseConnected] = useState<boolean>(() => isSupabaseConnected());
 
-  // Current session user - Ao abrir o programa, sempre deve exigir autenticação (exibindo a tela de login)
+  // Current session user
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    if (auth.currentUser) {
-      const isTargetExpired = auth.currentUser.uid === 'kU4JDgCeM6ggMHYuvnixzV';
-      return {
-        id: auth.currentUser.uid,
-        company_id: 'comp_ozi_01',
-        name: auth.currentUser.displayName || 'Usuário Sistema',
-        email: auth.currentUser.email || '',
-        phone: '(11) 98765-4321',
-        whatsapp: '(11) 98765-4321',
-        role: 'ADMINISTRADOR',
-        avatar: auth.currentUser.photoURL || 'https://unsplash.com',
-        active: true,
-        created_at: new Date().toISOString().split('T')[0],
-        subscriptionStatus: isTargetExpired ? 'expired' : 'trial',
-        trialEndsAt: isTargetExpired ? '2025-01-01' : undefined,
-      };
+    const cached = localStorage.getItem('ozi_current_user');
+    if (cached) {
+      try {
+        const parsed: User = JSON.parse(cached);
+        const rawStatus = (parsed.subscription_status || parsed.subscriptionStatus || 'trial').toLowerCase();
+        // Se for trial e estiver sem data ou com período expirado, atualiza imediatamente para valer 15 dias a partir de hoje
+        if (rawStatus === 'trial' || !parsed.subscriptionStatus) {
+          const rawEnd = parsed.trial_end || parsed.trial_ends_at || parsed.trialEndsAt;
+          if (!rawEnd || !isTrialActive(rawEnd)) {
+            const trialDates = calculateTrialEndDates(15);
+            parsed.subscription_status = 'trial';
+            parsed.subscriptionStatus = 'trial';
+            parsed.trial_start = trialDates.trial_start;
+            parsed.trial_end = trialDates.trial_end;
+            parsed.trial_ends_at = trialDates.trial_ends_at;
+            parsed.trialEndsAt = trialDates.trialEndsAt;
+            localStorage.setItem('ozi_current_user', JSON.stringify(parsed));
+          }
+        }
+        return parsed;
+      } catch (e) {}
     }
-    // Sempre que abrir o programa, exibe a tela de login por padrão (sem bypass automático)
     return null;
   });
 
-  // Listen to Firebase Auth state
+  // Listen to Supabase Auth state & Session
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async (fbUser) => {
-        setFirebaseUser(fbUser);
-        if (fbUser) {
-          setFirebaseConnected(true);
-          try {
-            // Regra 1: Toda vez que o usuário logar, verifica o documento dele na coleção "users" do Firestore
-            const verified = await verifyUserSubscriptionInFirestore(fbUser.uid);
-            if (!verified.email && fbUser.email) {
-              verified.email = fbUser.email;
-              verified.name = fbUser.displayName || verified.name;
-            }
-            // Força expiração para UID kU4JDgCeM6ggMHYuvnixzV caso não esteja com assinatura ativa
-            if (fbUser.uid === 'kU4JDgCeM6ggMHYuvnixzV' && verified.subscriptionStatus !== 'active') {
-              verified.subscriptionStatus = 'expired';
-            }
-            setCurrentUser(verified);
-            localStorage.setItem('ozi_current_user', JSON.stringify(verified));
-            setUsers((prev) => {
-              const exists = prev.some((u) => u.id === verified.id || u.email === verified.email);
-              const updated = exists
-                ? prev.map((u) => (u.id === verified.id || u.email === verified.email ? verified : u))
-                : [verified, ...prev];
-              saveToStorage('users', updated);
-              return updated;
-            });
-          } catch (err) {
-            console.warn('Erro ao sincronizar/verificar usuário no Firestore:', err);
+    const supabase = getSupabase();
+    if (!supabase) {
+      setSupabaseConnected(false);
+      return;
+    }
+    setSupabaseConnected(true);
+
+    // Checar sessão ativa
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!error && session?.user) {
+        setSupabaseUser(session.user);
+        verifyUserSubscriptionInSupabase(session.user.id, session.user.email || '').then((verified) => {
+          setCurrentUser(verified);
+          localStorage.setItem('ozi_current_user', JSON.stringify(verified));
+        });
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Supabase Auth Event]:', event);
+      if (session?.user) {
+        setSupabaseUser(session.user);
+        setSupabaseConnected(true);
+        try {
+          const verified = await verifyUserSubscriptionInSupabase(session.user.id, session.user.email || '');
+          setCurrentUser(verified);
+          localStorage.setItem('ozi_current_user', JSON.stringify(verified));
+          setUsers((prev) => {
+            const exists = prev.some((u) => u.id === verified.id || u.email === verified.email);
+            const updated = exists
+              ? prev.map((u) => (u.id === verified.id || u.email === verified.email ? verified : u))
+              : [verified, ...prev];
+            saveToStorage('users', updated);
+            return updated;
+          });
+        } catch (err) {
+          console.warn('Erro ao sincronizar usuário no Supabase:', err);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setSupabaseUser(null);
+        setCurrentUser(null);
+        localStorage.removeItem('ozi_current_user');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Sync Supabase data when connected
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !company.id) return;
+
+    let isMounted = true;
+    const syncData = async () => {
+      try {
+        const [cloudClients, cloudQuotes, cloudAppointments, cloudProjects, cloudEntries, cloudExpenses] =
+          await Promise.all([
+            fetchClientsFromSupabase(company.id),
+            fetchQuotesFromSupabase(company.id),
+            fetchAppointmentsFromSupabase(company.id),
+            fetchProjectsFromSupabase(company.id),
+            fetchFinancialEntriesFromSupabase(company.id),
+            fetchFinancialExpensesFromSupabase(company.id),
+          ]);
+
+        if (isMounted) {
+          if (cloudClients && cloudClients.length > 0) {
+            setClients(cloudClients);
+            saveToStorage('clients', cloudClients);
+          }
+          if (cloudQuotes && cloudQuotes.length > 0) {
+            setQuotes(cloudQuotes);
+            saveToStorage('quotes', cloudQuotes);
+          }
+          if (cloudAppointments && cloudAppointments.length > 0) {
+            setAppointments(cloudAppointments);
+            saveToStorage('appointments', cloudAppointments);
+          }
+          if (cloudProjects && cloudProjects.length > 0) {
+            setProjects(cloudProjects);
+            saveToStorage('projects', cloudProjects);
+          }
+          if (cloudEntries && cloudEntries.length > 0) {
+            setFinancialEntries(cloudEntries);
+            saveToStorage('entries', cloudEntries);
+          }
+          if (cloudExpenses && cloudExpenses.length > 0) {
+            setFinancialExpenses(cloudExpenses);
+            saveToStorage('expenses', cloudExpenses);
           }
         }
-      },
-      (error) => {
-        console.warn('Firebase onAuthStateChanged error:', error);
+      } catch (err) {
+        console.warn('Erro ao carregar dados do Supabase:', err);
       }
-    );
+    };
 
-    return () => unsubscribe();
-  }, []);
+    syncData();
+    return () => {
+      isMounted = false;
+    };
+  }, [company.id]);
 
   // Always keep localStorage in sync with currentUser
   useEffect(() => {
@@ -298,46 +446,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  // Avaliação em tempo real do período de teste de 15 dias e status da assinatura
+  // Avaliação do período de teste de 15 dias e status da assinatura
   const subscriptionInfo = evaluateSubscription(currentUser);
   const isSubscriptionBlocked = subscriptionInfo.isBlocked;
 
-  // Login with Firebase Email & Password
-  const loginWithFirebaseEmail = async (email: string, password: string): Promise<User> => {
+  // Login via Supabase
+  const loginWithSupabaseEmail = async (email: string, password: string): Promise<User> => {
     try {
-      const user = await signInWithEmail(email, password);
+      const user = await signInWithSupabase(email, password);
       setCurrentUser(user);
       localStorage.setItem('ozi_current_user', JSON.stringify(user));
-      addToast(`Autenticado com sucesso via Firebase: ${user.name}!`, 'success');
+      addToast(`Autenticado com sucesso via Supabase: ${user.name}!`, 'success');
       return user;
     } catch (error: any) {
-      console.error('Firebase Email Login Error:', error);
-      const code = error?.code || '';
-      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
-        throw new Error('E-mail ou senha incorretos.');
-      } else if (code === 'auth/user-not-found') {
-        throw new Error('Nenhum usuário cadastrado com este e-mail no Firebase.');
-      } else if (code === 'auth/invalid-email') {
-        throw new Error('Endereço de e-mail inválido.');
-      } else if (code === 'auth/operation-not-allowed') {
-        throw new Error(
-          'O provedor de login com Email/Senha precisa ser ativado no Firebase Console (Authentication > Sign-in method > Email/Password).'
-        );
-      } else if (code === 'auth/network-request-failed') {
-        throw new Error('Falha de conexão com a rede. Verifique seu acesso à internet.');
-      }
-      throw new Error(error?.message || 'Erro ao realizar login no Firebase.');
+      console.error('Supabase Email Login Error:', error);
+      throw new Error(error?.message || 'Falha ao autenticar com Supabase.');
     }
   };
 
-  // Register with Firebase Email & Password
-  const registerWithFirebaseEmail = async (
+  // Register via Supabase
+  const registerWithSupabaseEmail = async (
     email: string,
     password: string,
     extra: { name: string; role: UserRole; phone?: string; whatsapp?: string }
   ): Promise<User> => {
     try {
-      const newUser = await registerWithEmail(email, password, {
+      const newUser = await signUpWithSupabase(email, password, {
         name: extra.name,
         role: extra.role,
         phone: extra.phone,
@@ -345,7 +479,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         company_id: company.id,
       });
 
-      // Add to local state list
       setUsers((prev) => {
         const updated = [newUser, ...prev.filter((u) => u.email !== newUser.email)];
         saveToStorage('users', updated);
@@ -354,56 +487,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setCurrentUser(newUser);
       localStorage.setItem('ozi_current_user', JSON.stringify(newUser));
-      addToast(`Conta criada e conectada ao Firebase: ${newUser.name}!`, 'success');
+      addToast(`Conta criada e autenticada no Supabase: ${newUser.name}!`, 'success');
       return newUser;
     } catch (error: any) {
-      console.error('Firebase Register Error:', error);
-      const code = error?.code || '';
-      if (code === 'auth/email-already-in-use') {
-        throw new Error('Este e-mail já está registrado no Firebase. Tente fazer login.');
-      } else if (code === 'auth/weak-password') {
-        throw new Error('A senha do Firebase deve conter pelo menos 6 caracteres.');
-      } else if (code === 'auth/invalid-email') {
-        throw new Error('Formato de e-mail inválido.');
-      } else if (code === 'auth/operation-not-allowed') {
-        throw new Error(
-          'O provedor Email/Password não está habilitado no Console do Firebase. Ative em Authentication > Sign-in method.'
-        );
-      }
-      throw new Error(error?.message || 'Erro ao registrar usuário no Firebase.');
+      console.error('Supabase Register Error:', error);
+      throw new Error(error?.message || 'Erro ao registrar usuário no Supabase.');
     }
   };
 
-  // Login with Google Popup
-  const loginWithFirebaseGoogle = async (): Promise<User> => {
+  // Login with Google OAuth via Supabase
+  const loginWithSupabaseGoogle = async (): Promise<void> => {
     try {
-      const user = await signInWithGoogle();
-      setCurrentUser(user);
-      localStorage.setItem('ozi_current_user', JSON.stringify(user));
-      addToast(`Bem-vindo via Google, ${user.name}!`, 'success');
-      return user;
+      await signInWithGoogleOAuth();
     } catch (error: any) {
-      console.error('Firebase Google Login Error:', error);
-      if (error?.code === 'auth/popup-closed-by-user') {
-        throw new Error('O popup de login do Google foi fechado antes de concluir.');
-      }
-      throw new Error(error?.message || 'Falha ao autenticar com Google.');
+      console.error('Supabase Google Login Error:', error);
+      throw new Error(error?.message || 'Falha ao autenticar com Google no Supabase.');
     }
   };
 
-  // Reset Password via Firebase
-  const resetFirebasePassword = async (email: string): Promise<void> => {
+  // Reset Password via Supabase
+  const resetSupabasePassword = async (email: string): Promise<void> => {
     try {
-      await sendPasswordReset(email);
+      await sendSupabasePasswordReset(email);
       addToast('E-mail de redefinição de senha enviado com sucesso!', 'success');
     } catch (error: any) {
-      console.error('Firebase Password Reset Error:', error);
-      const code = error?.code || '';
-      if (code === 'auth/user-not-found') {
-        throw new Error('Nenhum usuário com este e-mail encontrado no Firebase.');
-      } else if (code === 'auth/invalid-email') {
-        throw new Error('Formato de e-mail inválido.');
-      }
+      console.error('Supabase Password Reset Error:', error);
       throw new Error(error?.message || 'Falha ao enviar e-mail de redefinição.');
     }
   };
@@ -417,19 +525,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return false;
       }
 
-      // Regra 2 & 3: Avaliar status do período de teste
-      const todayStr = new Date().toISOString().split('T')[0];
       let userObj: User = { ...found };
-      if (!userObj.subscriptionStatus) {
+      const rawStatus = (userObj.subscription_status || userObj.subscriptionStatus || 'trial').toLowerCase();
+
+      if (!userObj.subscriptionStatus && !userObj.subscription_status) {
+        const trialDates = calculateTrialEndDates(15);
         userObj.subscriptionStatus = 'trial';
-        userObj.trialEndsAt = userObj.trialEndsAt || calculateTrialEndsAt(15);
-      }
-      if (
-        userObj.subscriptionStatus === 'trial' &&
-        userObj.trialEndsAt &&
-        todayStr > userObj.trialEndsAt
-      ) {
-        userObj.subscriptionStatus = 'expired';
+        userObj.subscription_status = 'trial';
+        userObj.trial_start = trialDates.trial_start;
+        userObj.trial_end = trialDates.trial_end;
+        userObj.trialEndsAt = trialDates.trial_ends_at;
+        userObj.trial_ends_at = trialDates.trial_ends_at;
+      } else if (rawStatus === 'trial') {
+        const trialEnd = userObj.trial_end || userObj.trial_ends_at || userObj.trialEndsAt;
+        if (trialEnd) {
+          const isValid = isTrialActive(trialEnd);
+          if (!isValid) {
+            userObj.subscriptionStatus = 'expired';
+            userObj.subscription_status = 'expired';
+          }
+        }
       }
 
       setCurrentUser(userObj);
@@ -443,33 +558,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = async () => {
     try {
-      await logoutUser();
+      await signOutSupabase();
     } catch (err) {
-      console.warn('Logout Firebase error:', err);
+      console.warn('Logout Supabase error:', err);
     }
     setCurrentUser(null);
+    setSupabaseUser(null);
     localStorage.removeItem('ozi_current_user');
     addToast('Sessão encerrada com sucesso.', 'info');
   };
 
-  // Regra 5: Ativar Assinatura Mensal (R$ 26,99/mês) e atualizar o Firestore
+  // Ativar Assinatura Mensal (R$ 26,99/mês) e atualizar Supabase
   const activateSubscription = async (): Promise<void> => {
     if (!currentUser) return;
     try {
-      const updated = await activateUserSubscription(currentUser.id);
-      setCurrentUser(updated);
-      localStorage.setItem('ozi_current_user', JSON.stringify(updated));
+      const updated = await activateUserSubscriptionInSupabase(currentUser.id);
+      const finalUser: User = {
+        ...currentUser,
+        subscriptionStatus: 'active',
+        subscription_status: 'active',
+        trialEndsAt: undefined,
+        trial_ends_at: undefined,
+      };
+      setCurrentUser(finalUser);
+      localStorage.setItem('ozi_current_user', JSON.stringify(finalUser));
       setUsers((prev) => {
-        const next = prev.map((u) => (u.id === updated.id ? updated : u));
+        const next = prev.map((u) => (u.id === finalUser.id ? finalUser : u));
         saveToStorage('users', next);
         return next;
       });
       addToast('Assinatura Mensal de R$ 26,99/mês ativada com sucesso! Acesso liberado.', 'success');
     } catch (err) {
-      console.warn('Erro ao atualizar assinatura no Firestore, aplicando no estado local:', err);
+      console.warn('Erro ao atualizar assinatura no Supabase, aplicando no estado local:', err);
       const fallbackUser: User = {
         ...currentUser,
         subscriptionStatus: 'active',
+        subscription_status: 'active',
       };
       setCurrentUser(fallbackUser);
       localStorage.setItem('ozi_current_user', JSON.stringify(fallbackUser));
@@ -478,31 +602,212 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveToStorage('users', next);
         return next;
       });
-      addToast('Assinatura Mensal de R$ 26,99/mês ativada com sucesso! Acesso liberado.', 'success');
+      addToast('Acesso ativado com sucesso!', 'info');
     }
   };
 
-  // Helper para simulação e teste nos ambientes de desenvolvimento
+  // Renovar período de teste grátis (15 dias a partir de hoje)
+  const renewTrial15Days = async (targetUser?: User): Promise<User | null> => {
+    const userToRenew = targetUser || currentUser;
+    if (!userToRenew) return null;
+
+    const trialDates = calculateTrialEndDates(15);
+    try {
+      await renewUserTrialInSupabase(userToRenew.id, userToRenew.email);
+    } catch (err) {
+      console.warn('Erro ao atualizar trial no Supabase:', err);
+    }
+
+    const updatedUser: User = {
+      ...userToRenew,
+      subscriptionStatus: 'trial',
+      subscription_status: 'trial',
+      trial_start: trialDates.trial_start,
+      trial_end: trialDates.trial_end,
+      trialEndsAt: trialDates.trial_ends_at,
+      trial_ends_at: trialDates.trial_ends_at,
+    };
+
+    if (!targetUser || targetUser.id === currentUser?.id) {
+      setCurrentUser(updatedUser);
+      localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
+    }
+
+    setUsers((prev) => {
+      const next = prev.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+      saveToStorage('users', next);
+      return next;
+    });
+
+    addToast('Período de teste grátis (15 dias) renovado a partir de hoje com acesso total!', 'success');
+    return updatedUser;
+  };
+
+  // Ajuste do período de teste / simulação
   const setSubscriptionForTesting = (
     status: 'trial' | 'active' | 'expired',
     trialEndsAt?: string
   ) => {
     if (!currentUser) return;
-    const newTrialEndsAt =
-      trialEndsAt || (status === 'expired' ? '2025-01-01' : calculateTrialEndsAt(15));
+    const now = new Date();
+    const trialDates = calculateTrialEndDates(15);
+    const end = trialEndsAt
+      ? (trialEndsAt.includes('T') ? trialEndsAt : `${trialEndsAt}T23:59:59.999Z`)
+      : trialDates.trial_end;
+
     const updated: User = {
       ...currentUser,
       subscriptionStatus: status,
-      trialEndsAt: newTrialEndsAt,
+      subscription_status: status,
+      trial_start: status === 'trial' ? now.toISOString() : currentUser.trial_start,
+      trial_end: status === 'trial' ? end : undefined,
+      trialEndsAt: status === 'trial' ? end.split('T')[0] : undefined,
+      trial_ends_at: status === 'trial' ? end.split('T')[0] : undefined,
     };
     setCurrentUser(updated);
     localStorage.setItem('ozi_current_user', JSON.stringify(updated));
+    syncUserProfileToSupabase(updated);
     setUsers((prev) => {
       const next = prev.map((u) => (u.id === updated.id ? updated : u));
       saveToStorage('users', next);
       return next;
     });
     addToast(`Status de assinatura ajustado para: ${status}`, 'info');
+  };
+
+  // Contagem de clientes que expiram em até 5 dias
+  const expiringClientsCount = users.filter((u) => {
+    const metrics = calculateExpirationMetrics(u);
+    return metrics.isExpiringSoon && !metrics.isExpired;
+  }).length;
+
+  // Master Admin: Estender prazo (+5, +15 dias)
+  const extendUserSubscription = async (userId: string, additionalDays: number) => {
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+
+    try {
+      const res = await extendUserTrialInSupabase(
+        target.id,
+        additionalDays,
+        target.email,
+        target.trial_end || (target.trialEndsAt ? `${target.trialEndsAt}T23:59:59.999Z` : undefined)
+      );
+
+      const updatedUser: User = {
+        ...target,
+        subscriptionStatus: 'trial',
+        subscription_status: 'trial',
+        trial_end: res.trial_end,
+        trial_ends_at: res.trial_ends_at,
+        trialEndsAt: res.trial_ends_at,
+      };
+
+      if (currentUser && currentUser.id === target.id) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
+      }
+
+      setUsers((prev) => {
+        const next = prev.map((u) => (u.id === target.id ? updatedUser : u));
+        saveToStorage('users', next);
+        return next;
+      });
+
+      addToast(`Prazo de ${target.name} estendido com sucesso (+${additionalDays} dias)!`, 'success');
+    } catch (e) {
+      console.warn('Erro ao estender prazo do usuário:', e);
+      addToast('Erro ao estender prazo.', 'error');
+    }
+  };
+
+  // Master Admin: Ativar assinatura manualmente (+30 dias / ativa)
+  const activateUserSubscriptionAdmin = async (userId: string) => {
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+
+    try {
+      const res = await activateUserInSupabaseAdmin(target.id, target.email);
+      const updatedUser: User = {
+        ...target,
+        subscriptionStatus: 'active',
+        subscription_status: 'active',
+        trial_end: res.trial_end,
+        trial_ends_at: res.trial_ends_at,
+        trialEndsAt: res.trial_ends_at,
+      };
+
+      if (currentUser && currentUser.id === target.id) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
+      }
+
+      setUsers((prev) => {
+        const next = prev.map((u) => (u.id === target.id ? updatedUser : u));
+        saveToStorage('users', next);
+        return next;
+      });
+
+      addToast(`Assinatura de ${target.name} ativada manualmente!`, 'success');
+    } catch (e) {
+      console.warn('Erro ao ativar usuário no Supabase:', e);
+      addToast('Erro ao ativar usuário.', 'error');
+    }
+  };
+
+  // Master Admin: Bloquear / Expirar assinatura manualmente
+  const blockUserSubscriptionAdmin = async (userId: string) => {
+    const target = users.find((u) => u.id === userId);
+    if (!target) return;
+
+    try {
+      await blockUserInSupabaseAdmin(target.id, target.email);
+      const updatedUser: User = {
+        ...target,
+        subscriptionStatus: 'expired',
+        subscription_status: 'expired',
+      };
+
+      if (currentUser && currentUser.id === target.id) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
+      }
+
+      setUsers((prev) => {
+        const next = prev.map((u) => (u.id === target.id ? updatedUser : u));
+        saveToStorage('users', next);
+        return next;
+      });
+
+      addToast(`Acesso de ${target.name} bloqueado/expirado com sucesso.`, 'info');
+    } catch (e) {
+      console.warn('Erro ao bloquear usuário no Supabase:', e);
+      addToast('Erro ao atualizar status no servidor.', 'error');
+    }
+  };
+
+  // Master Admin: Recarregar lista completa de usuários do Supabase
+  const refreshUsersFromSupabase = async () => {
+    try {
+      const allUsers = await fetchAllPlatformUsersFromSupabase();
+      if (allUsers && allUsers.length > 0) {
+        setUsers((prev) => {
+          const merged = [...allUsers];
+          for (const localU of prev) {
+            if (!merged.some((m) => m.id === localU.id || m.email === localU.email)) {
+              merged.push(localU);
+            }
+          }
+          saveToStorage('users', merged);
+          return merged;
+        });
+        addToast('Lista de clientes e assinaturas atualizada do Supabase!', 'success');
+      } else {
+        addToast('Sincronização concluída.', 'info');
+      }
+    } catch (e) {
+      console.warn('Erro ao recarregar usuários:', e);
+    }
   };
 
   const addUser = (u: Omit<User, 'id' | 'created_at'>): User => {
@@ -514,6 +819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsers((prev) => {
       const updated = [newUser, ...prev];
       saveToStorage('users', updated);
+      syncUserProfileToSupabase(newUser);
       return updated;
     });
     addToast('Novo membro adicionado à equipe!', 'success');
@@ -522,7 +828,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateUser = (id: string, updates: Partial<User>) => {
     setUsers((prev) => {
-      const updated = prev.map((u) => (u.id === id ? { ...u, ...updates } : u));
+      const updated = prev.map((u) => {
+        if (u.id === id) {
+          const merged = { ...u, ...updates };
+          syncUserProfileToSupabase(merged);
+          return merged;
+        }
+        return u;
+      });
       saveToStorage('users', updated);
       return updated;
     });
@@ -552,6 +865,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setClients((prev) => {
       const updated = [newClient, ...prev];
       saveToStorage('clients', updated);
+      saveClientToSupabase(newClient);
       return updated;
     });
     addToast(`Cliente ${newClient.name} cadastrado com sucesso!`, 'success');
@@ -560,7 +874,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateClient = (id: string, updates: Partial<Client>) => {
     setClients((prev) => {
-      const updated = prev.map((c) => (c.id === id ? { ...c, ...updates } : c));
+      const updated = prev.map((c) => {
+        if (c.id === id) {
+          const merged = { ...c, ...updates };
+          saveClientToSupabase(merged);
+          return merged;
+        }
+        return c;
+      });
       saveToStorage('clients', updated);
       return updated;
     });
@@ -571,6 +892,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setClients((prev) => {
       const updated = prev.filter((c) => c.id !== id);
       saveToStorage('clients', updated);
+      deleteClientFromSupabase(id);
       return updated;
     });
     addToast('Cliente removido.', 'info');
@@ -594,6 +916,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuotes((prev) => {
       const updated = [newQuote, ...prev];
       saveToStorage('quotes', updated);
+      saveQuoteToSupabase(newQuote);
       return updated;
     });
     addToast(`Orçamento ${newQuote.code} gerado com sucesso!`, 'success');
@@ -602,7 +925,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateQuote = (id: string, updates: Partial<Quote>) => {
     setQuotes((prev) => {
-      const updated = prev.map((q) => (q.id === id ? { ...q, ...updates } : q));
+      const updated = prev.map((q) => {
+        if (q.id === id) {
+          const merged = { ...q, ...updates };
+          saveQuoteToSupabase(merged);
+          return merged;
+        }
+        return q;
+      });
       saveToStorage('quotes', updated);
       return updated;
     });
@@ -613,161 +943,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQuotes((prev) => {
       const updated = prev.filter((q) => q.id !== id);
       saveToStorage('quotes', updated);
+      deleteQuoteFromSupabase(id);
       return updated;
     });
-    addToast('Orçamento excluído.', 'info');
+    addToast('Orçamento removido.', 'info');
   };
 
   const approveQuote = (id: string) => {
-    setQuotes((prev) => {
-      const updated = prev.map((q) => (q.id === id ? { ...q, status: 'Aprovado' as const } : q));
-      saveToStorage('quotes', updated);
-      return updated;
-    });
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
-    addToast('Orçamento Aprovado com sucesso! 🎉', 'success');
+    updateQuote(id, { status: 'Aprovado' });
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    addToast('Orçamento aprovado com sucesso! 🎉', 'success');
   };
 
   const rejectQuote = (id: string) => {
-    setQuotes((prev) => {
-      const updated = prev.map((q) => (q.id === id ? { ...q, status: 'Recusado' as const } : q));
-      saveToStorage('quotes', updated);
-      return updated;
-    });
+    updateQuote(id, { status: 'Recusado' });
     addToast('Orçamento marcado como recusado.', 'info');
   };
 
-  const duplicateQuote = (id: string) => {
-    const original = quotes.find((q) => q.id === id);
-    if (!original) return;
+  const duplicateQuote = (id: string): Quote => {
+    const source = quotes.find((q) => q.id === id);
+    if (!source) throw new Error('Orçamento de origem não encontrado.');
+
     const year = new Date().getFullYear();
     const count = quotes.length + 1;
     const code = `ORC-${year}-${count.toString().padStart(3, '0')}`;
-    const duplicated: Quote = {
-      ...original,
+
+    const cloned: Quote = {
+      ...source,
       id: generateId('orc'),
       code,
       status: 'Novo',
       date: new Date().toISOString().split('T')[0],
       created_at: new Date().toISOString().split('T')[0],
-      converted_to_project_id: undefined,
     };
+
     setQuotes((prev) => {
-      const updated = [duplicated, ...prev];
+      const updated = [cloned, ...prev];
       saveToStorage('quotes', updated);
+      saveQuoteToSupabase(cloned);
       return updated;
     });
-    addToast(`Orçamento duplicado: ${duplicated.code}`, 'success');
+
+    addToast(`Orçamento duplicado com código ${code}!`, 'success');
+    return cloned;
   };
 
-  // Convert Quote into Project (AUTOMATION)
   const convertToProject = (quoteId: string): Project | null => {
     const quote = quotes.find((q) => q.id === quoteId);
     if (!quote) return null;
 
     const year = new Date().getFullYear();
-    const pCount = projects.length + 1;
-    const projectCode = `OBR-${year}-${pCount.toString().padStart(3, '0')}`;
-
-    const defaultTasks: ProjectTask[] = quote.items.map((it, idx) => ({
-      id: `tsk_${Date.now()}_${idx}`,
-      project_id: '',
-      title: it.description,
-      status: 'Pendente',
-    }));
-
-    // Add standard prep & cleaning tasks
-    const tasks: ProjectTask[] = [
-      { id: `tsk_init_${Date.now()}`, project_id: '', title: 'Proteção do ambiente e isolamento', status: 'Pendente' },
-      ...defaultTasks,
-      { id: `tsk_clean_${Date.now()}`, project_id: '', title: 'Limpeza pós-obra e vistoria final', status: 'Pendente' },
-    ];
-
-    const today = new Date();
-    const expected = new Date(today);
-    expected.setDate(expected.getDate() + 20);
+    const count = projects.length + 1;
+    const code = `OBR-${year}-${count.toString().padStart(3, '0')}`;
 
     const newProject: Project = {
       id: generateId('prj'),
-      code: projectCode,
-      name: `Obra - ${quote.client_name} (${quote.code})`,
-      company_id: company.id,
+      code,
+      name: `Obra - ${quote.client_name}`,
+      company_id: quote.company_id,
       quote_id: quote.id,
       client_id: quote.client_id,
       client_name: quote.client_name,
-      phone: quote.client_phone,
-      whatsapp: quote.client_phone,
-      address: quote.client_address,
-      start_date: today.toISOString().split('T')[0],
-      expected_completion_date: expected.toISOString().split('T')[0],
+      phone: quote.client_phone || '',
+      client_phone: quote.client_phone || '',
+      whatsapp: quote.client_phone || '',
+      address: quote.client_address || '',
+      start_date: new Date().toISOString().split('T')[0],
+      expected_completion_date: quote.valid_until || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
       responsible_id: quote.responsible_id,
       responsible_name: quote.responsible_name,
-      team_members: [quote.responsible_name, 'Equipe de Obras'],
+      team_members: [],
       total_value: quote.total,
       received_value: 0,
       progress: 0,
       status: 'Em andamento',
-      notes: quote.notes || `Gerado automaticamente a partir do orçamento ${quote.code}`,
-      tasks,
+      notes: quote.notes || '',
+      tasks: quote.items.map((it, idx) => ({
+        id: generateId('tsk'),
+        project_id: '',
+        title: it.description,
+        status: 'Pendente',
+        completed: false,
+        due_date: quote.valid_until,
+      })),
       photos: [],
-      created_at: today.toISOString().split('T')[0],
+      daily_logs: [],
+      created_at: new Date().toISOString().split('T')[0],
     };
 
-    // Update quote
-    updateQuote(quote.id, {
-      status: 'Aprovado',
-      converted_to_project_id: newProject.id,
-    });
+    newProject.tasks = newProject.tasks.map((t) => ({ ...t, project_id: newProject.id }));
 
-    // Save project
     setProjects((prev) => {
       const updated = [newProject, ...prev];
       saveToStorage('projects', updated);
+      saveProjectToSupabase(newProject);
       return updated;
     });
 
-    // Auto-create initial receivable forecast entry
-    const entry50: FinancialEntry = {
-      id: generateId('ent'),
-      company_id: company.id,
-      project_id: newProject.id,
-      project_title: `${newProject.code} - ${newProject.client_name}`,
-      client_id: newProject.client_id,
-      client_name: newProject.client_name,
-      description: `Entrada 50% - Obra ${newProject.code}`,
-      amount: quote.total * 0.5,
-      date: newProject.start_date,
-      payment_method: 'PIX',
-      status: 'Pendente',
-      created_at: new Date().toISOString().split('T')[0],
-    };
-
-    const entryRest: FinancialEntry = {
-      id: generateId('ent'),
-      company_id: company.id,
-      project_id: newProject.id,
-      project_title: `${newProject.code} - ${newProject.client_name}`,
-      client_id: newProject.client_id,
-      client_name: newProject.client_name,
-      description: `Parcela Final 50% - Obra ${newProject.code}`,
-      amount: quote.total * 0.5,
-      date: newProject.expected_completion_date,
-      payment_method: 'PIX',
-      status: 'Pendente',
-      created_at: new Date().toISOString().split('T')[0],
-    };
-
-    setFinancialEntries((prev) => {
-      const updated = [entry50, entryRest, ...prev];
-      saveToStorage('entries', updated);
-      return updated;
-    });
-
-    addToast(`Obra ${newProject.code} criada e previsões financeiras geradas!`, 'success');
+    updateQuote(quoteId, { converted_to_project_id: newProject.id, status: 'Aprovado' });
+    confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+    addToast(`Obra ${newProject.code} criada a partir do orçamento! 🏗️`, 'success');
     return newProject;
   };
 
@@ -785,15 +1060,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppointments((prev) => {
       const updated = [newAppointment, ...prev];
       saveToStorage('appointments', updated);
+      saveAppointmentToSupabase(newAppointment);
       return updated;
     });
-    addToast('Agendamento registrado com sucesso!', 'success');
+    addToast('Agendamento cadastrado com sucesso!', 'success');
     return newAppointment;
   };
 
   const updateAppointment = (id: string, updates: Partial<Appointment>) => {
     setAppointments((prev) => {
-      const updated = prev.map((a) => (a.id === id ? { ...a, ...updates } : a));
+      const updated = prev.map((a) => {
+        if (a.id === id) {
+          const merged = { ...a, ...updates };
+          saveAppointmentToSupabase(merged);
+          return merged;
+        }
+        return a;
+      });
       saveToStorage('appointments', updated);
       return updated;
     });
@@ -804,6 +1087,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppointments((prev) => {
       const updated = prev.filter((a) => a.id !== id);
       saveToStorage('appointments', updated);
+      deleteAppointmentFromSupabase(id);
       return updated;
     });
     addToast('Agendamento removido.', 'info');
@@ -834,6 +1118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProjects((prev) => {
       const updated = [newProject, ...prev];
       saveToStorage('projects', updated);
+      saveProjectToSupabase(newProject);
       return updated;
     });
     addToast(`Obra ${newProject.code} cadastrada com sucesso!`, 'success');
@@ -842,7 +1127,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateProject = (id: string, updates: Partial<Project>) => {
     setProjects((prev) => {
-      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      const updated = prev.map((p) => {
+        if (p.id === id) {
+          const merged = { ...p, ...updates };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -853,6 +1145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProjects((prev) => {
       const updated = prev.filter((p) => p.id !== id);
       saveToStorage('projects', updated);
+      deleteProjectFromSupabase(id);
       return updated;
     });
     addToast('Obra removida.', 'info');
@@ -862,9 +1155,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const clamped = Math.max(0, Math.min(100, progress));
     const status = clamped === 100 ? 'Concluída' : 'Em andamento';
     setProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === id ? { ...p, progress: clamped, status: p.status === 'Cancelada' ? p.status : status } : p
-      );
+      const updated = prev.map((p) => {
+        if (p.id === id) {
+          const merged = { ...p, progress: clamped, status: p.status === 'Cancelada' ? p.status : status };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -883,9 +1181,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       project_id: projectId,
     };
     setProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === projectId ? { ...p, tasks: [...p.tasks, newTask] } : p
-      );
+      const updated = prev.map((p) => {
+        if (p.id === projectId) {
+          const merged = { ...p, tasks: [...p.tasks, newTask] };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -901,11 +1204,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const nextStatus = t.status === 'Concluído' ? 'Pendente' : 'Concluído';
           return { ...t, status: nextStatus as 'Pendente' | 'Concluído' };
         });
-        // Auto calculate progress percentage based on completed tasks
         const total = newTasks.length;
         const completed = newTasks.filter((t) => t.status === 'Concluído').length;
         const autoProgress = total > 0 ? Math.round((completed / total) * 100) : p.progress;
-        return { ...p, tasks: newTasks, progress: autoProgress };
+        const merged = { ...p, tasks: newTasks, progress: autoProgress };
+        saveProjectToSupabase(merged);
+        return merged;
       });
       saveToStorage('projects', updated);
       return updated;
@@ -914,9 +1218,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteTaskFromProject = (projectId: string, taskId: string) => {
     setProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === projectId ? { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) } : p
-      );
+      const updated = prev.map((p) => {
+        if (p.id === projectId) {
+          const merged = { ...p, tasks: p.tasks.filter((t) => t.id !== taskId) };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -934,9 +1243,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString().split('T')[0],
     };
     setProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === projectId ? { ...p, photos: [newPhoto, ...p.photos] } : p
-      );
+      const updated = prev.map((p) => {
+        if (p.id === projectId) {
+          const merged = { ...p, photos: [newPhoto, ...p.photos] };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -945,9 +1259,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePhotoFromProject = (projectId: string, photoId: string) => {
     setProjects((prev) => {
-      const updated = prev.map((p) =>
-        p.id === projectId ? { ...p, photos: p.photos.filter((ph) => ph.id !== photoId) } : p
-      );
+      const updated = prev.map((p) => {
+        if (p.id === projectId) {
+          const merged = { ...p, photos: p.photos.filter((ph) => ph.id !== photoId) };
+          saveProjectToSupabase(merged);
+          return merged;
+        }
+        return p;
+      });
       saveToStorage('projects', updated);
       return updated;
     });
@@ -968,9 +1287,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinancialEntries((prev) => {
       const updated = [newEntry, ...prev];
       saveToStorage('entries', updated);
+      saveFinancialEntryToSupabase(newEntry);
       return updated;
     });
-    // If entry is linked to project and is received, update received_value in project
     if (newEntry.project_id && newEntry.status === 'Recebido') {
       setProjects((prev) => {
         const updated = prev.map((p) =>
@@ -985,7 +1304,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateFinancialEntry = (id: string, updates: Partial<FinancialEntry>) => {
     setFinancialEntries((prev) => {
-      const updated = prev.map((e) => (e.id === id ? { ...e, ...updates } : e));
+      const updated = prev.map((e) => {
+        if (e.id === id) {
+          const merged = { ...e, ...updates };
+          saveFinancialEntryToSupabase(merged);
+          return merged;
+        }
+        return e;
+      });
       saveToStorage('entries', updated);
       return updated;
     });
@@ -996,6 +1322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinancialEntries((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       saveToStorage('entries', updated);
+      deleteFinancialEntryFromSupabase(id);
       return updated;
     });
     addToast('Lançamento excluído.', 'info');
@@ -1015,6 +1342,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinancialExpenses((prev) => {
       const updated = [newExpense, ...prev];
       saveToStorage('expenses', updated);
+      saveFinancialExpenseToSupabase(newExpense);
       return updated;
     });
     addToast('Gasto financeiro registrado!', 'success');
@@ -1022,7 +1350,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateFinancialExpense = (id: string, updates: Partial<FinancialExpense>) => {
     setFinancialExpenses((prev) => {
-      const updated = prev.map((e) => (e.id === id ? { ...e, ...updates } : e));
+      const updated = prev.map((e) => {
+        if (e.id === id) {
+          const merged = { ...e, ...updates };
+          saveFinancialExpenseToSupabase(merged);
+          return merged;
+        }
+        return e;
+      });
       saveToStorage('expenses', updated);
       return updated;
     });
@@ -1033,12 +1368,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinancialExpenses((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       saveToStorage('expenses', updated);
+      deleteFinancialExpenseFromSupabase(id);
       return updated;
     });
     addToast('Gasto excluído.', 'info');
   };
 
-  // Monthly Goals & Diluted Expenses
+  // Monthly Goals
   const [monthlyGoals, setMonthlyGoals] = useState<Record<string, MonthlyGoal>>(() => {
     return loadFromStorage('monthly_goals', {
       [DEFAULT_MONTHLY_GOAL.month]: DEFAULT_MONTHLY_GOAL,
@@ -1049,7 +1385,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (monthlyGoals[month]) {
       return monthlyGoals[month];
     }
-    // Default calculation based on work_days=22
     const totalExp = DEFAULT_MONTHLY_GOAL.total_expenses;
     const workDays = DEFAULT_MONTHLY_GOAL.work_days;
     return {
@@ -1097,53 +1432,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Todas as notificações foram marcadas como lidas.', 'info');
   };
 
-  // Toasts
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    const id = generateId('tst');
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      removeToast(id);
-    }, 4000);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
   // Global Search Modal
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Quick Action Modal
+  // Quick Action Modals & Pre-fills
   const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
-  const [modalPayload, setModalPayload] = useState<any>(null);
-  const [pendingQuotePrefill, setPendingQuotePrefill] = useState<any>(null);
   const [pendingAppointmentPrefill, setPendingAppointmentPrefill] = useState<any>(null);
+  const [pendingQuotePrefill, setPendingQuotePrefill] = useState<any>(null);
 
-  const openQuickAction = (action: string, payload?: any) => {
-    setQuickActionModal(action);
-    setModalPayload(payload || null);
-    if (action === 'newQuote') {
-      setPendingQuotePrefill(payload || null);
-      setActiveTab('quotes');
-    } else if (action === 'newAppointment') {
-      setPendingAppointmentPrefill(payload || null);
-      setActiveTab('appointments');
+  const openQuickAction = (action: string, prefill?: any) => {
+    if (action === 'appointment' && prefill) {
+      setPendingAppointmentPrefill(prefill);
+    } else if (action === 'quote' && prefill) {
+      setPendingQuotePrefill(prefill);
     }
+    setQuickActionModal(action);
   };
 
   const closeQuickAction = () => {
     setQuickActionModal(null);
-    setModalPayload(null);
   };
 
-  // Reset demo data
-  const resetDemoData = () => {
+  // Reset to Demo Data
+  const resetToDemoData = () => {
     resetAllToDemoData();
     setCompany(INITIAL_COMPANY);
     setUsers(INITIAL_USERS);
-    setCurrentUser(INITIAL_USERS[0]);
     setClients(INITIAL_CLIENTS);
     setQuotes(INITIAL_QUOTES);
     setAppointments(INITIAL_APPOINTMENTS);
@@ -1165,16 +1480,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         login,
         logout,
-        firebaseUser,
-        firebaseConnected,
-        loginWithFirebaseEmail,
-        registerWithFirebaseEmail,
-        loginWithFirebaseGoogle,
-        resetFirebasePassword,
+
+        // Supabase Auth
+        supabaseUser,
+        supabaseConnected,
+        loginWithSupabaseEmail,
+        registerWithSupabaseEmail,
+        loginWithSupabaseGoogle,
+        resetSupabasePassword,
+
+        // Aliases for compatibility
+        firebaseUser: supabaseUser,
+        firebaseConnected: supabaseConnected,
+        loginWithFirebaseEmail: loginWithSupabaseEmail,
+        registerWithFirebaseEmail: registerWithSupabaseEmail,
+        loginWithFirebaseGoogle: loginWithSupabaseGoogle,
+        resetFirebasePassword: resetSupabasePassword,
+
         subscriptionInfo,
         isSubscriptionBlocked,
         activateSubscription,
+        renewTrial15Days,
         setSubscriptionForTesting,
+        expiringClientsCount,
+        extendUserSubscription,
+        activateUserSubscriptionAdmin,
+        blockUserSubscriptionAdmin,
+        refreshUsersFromSupabase,
         company,
         updateCompany,
         activeTab,
@@ -1228,20 +1560,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notifications,
         markNotificationAsRead,
         clearAllNotifications,
+        searchModalOpen,
+        setSearchModalOpen,
+        isSearchOpen,
+        setIsSearchOpen,
+        openQuickAction,
+        quickActionModal,
+        closeQuickAction,
+        pendingAppointmentPrefill,
+        setPendingAppointmentPrefill,
+        pendingQuotePrefill,
+        setPendingQuotePrefill,
         toasts,
         addToast,
         removeToast,
-        isSearchOpen,
-        setIsSearchOpen,
-        quickActionModal,
-        openQuickAction,
-        closeQuickAction,
-        modalPayload,
-        pendingQuotePrefill,
-        setPendingQuotePrefill,
-        pendingAppointmentPrefill,
-        setPendingAppointmentPrefill,
-        resetDemoData,
+        resetToDemoData,
       }}
     >
       {children}
@@ -1249,10 +1582,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
-export function useApp() {
+export const useApp = (): AppContextType => {
   const context = useContext(AppContext);
   if (!context) {
     throw new Error('useApp must be used within an AppProvider');
   }
   return context;
-}
+};

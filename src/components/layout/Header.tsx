@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { calculateTrialEndsAt } from '../../lib/firebase';
+import { calculateTrialEndsAt } from '../../lib/supabaseClient';
 import {
   Bell,
   Search,
@@ -21,6 +21,8 @@ import {
   Clock,
   Sparkles,
   Zap,
+  AlertTriangle,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -42,7 +44,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
     setActiveTab,
     subscriptionInfo,
     setSubscriptionForTesting,
+    expiringClientsCount,
   } = useApp();
+
+  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const isMasterUser =
+    userRole === 'master' ||
+    userRole === 'admin' ||
+    userRole === 'administrador' ||
+    userEmail === 'vendas.impactodigital2@gmail.com';
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -97,6 +108,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
       {/* Right side controls */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Master Admin: Expirando em ≤ 5 dias alerta no Header */}
+        {isMasterUser && expiringClientsCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('master-admin')}
+            title="Clientes com período de teste prestes a vencer (≤ 5 dias) - Abrir Painel Master"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black shadow-xs transition-all animate-pulse cursor-pointer"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Prestes a Vencer:</span>
+            <span>{expiringClientsCount}</span>
+          </button>
+        )}
+
         {/* Trial Countdown Badge (when in active trial) */}
         {subscriptionInfo.status === 'trial' && !subscriptionInfo.isBlocked && (
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold shadow-xs animate-in fade-in">
@@ -351,6 +376,25 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
                     </button>
                   </div>
                 </div>
+                {isMasterUser && (
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setActiveTab('master-admin');
+                    }}
+                    className="w-full px-4 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-500" />
+                      <span>Painel Master</span>
+                    </div>
+                    {expiringClientsCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-slate-950 font-black">
+                        {expiringClientsCount} a vencer
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setShowUserMenu(false);

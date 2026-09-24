@@ -565,7 +565,10 @@ export const QuotesView: React.FC = () => {
         finalClientId = existing.id;
       } else {
         const created = addClient({
+          company_id: company.id || 'comp_ozi_01',
           name: clientName.trim(),
+          document: '',
+          email: '',
           phone: clientPhone.trim() || '(00) 00000-0000',
           whatsapp: clientPhone.trim() || '(00) 00000-0000',
           address: clientAddress.trim() || 'Não informado',
@@ -573,7 +576,7 @@ export const QuotesView: React.FC = () => {
           neighborhood: '',
           city: 'Local',
           state: 'UF',
-          zip: '',
+          zip_code: '',
           notes: 'Cadastrado automaticamente a partir do Orçamento de Serviço',
         });
         finalClientId = created.id;

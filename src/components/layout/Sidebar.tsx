@@ -33,20 +33,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
     sidebarCollapsed,
     setSidebarCollapsed,
     logout,
+    expiringClientsCount,
   } = useApp();
 
-  const userRole = currentUser?.role || 'ADMINISTRADOR';
+  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+
+  // Permissão Master: user.role === 'master' ou 'admin' ou 'administrador' ou email específico
+  const isMasterUser =
+    userRole === 'master' ||
+    userRole === 'admin' ||
+    userRole === 'administrador' ||
+    userEmail === 'vendas.impactodigital2@gmail.com';
 
   // Role permissions checking
   const checkAccess = (tab: ActiveTab): boolean => {
-    if (userRole === 'ADMINISTRADOR') return true;
-    if (userRole === 'GERENTE') {
+    if (tab === 'master-admin') {
+      return isMasterUser;
+    }
+    if (isMasterUser) return true;
+    if (userRole === 'gerente') {
       return ['dashboard', 'projects', 'quotes', 'appointments', 'calendar', 'financial', 'reports'].includes(tab);
     }
-    if (userRole === 'ORÇAMENTISTA') {
+    if (userRole === 'orçamentista' || userRole === 'orcamentista') {
       return ['dashboard', 'clients', 'quotes', 'appointments', 'calendar'].includes(tab);
     }
-    if (userRole === 'FUNCIONÁRIO') {
+    if (userRole === 'funcionário' || userRole === 'funcionario') {
       return ['dashboard', 'projects', 'calendar'].includes(tab);
     }
     return true;
@@ -62,6 +74,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
     { id: 'financial' as ActiveTab, label: 'Financeiro', icon: WalletCards },
     { id: 'team' as ActiveTab, label: 'Equipe', icon: UserCheck },
     { id: 'reports' as ActiveTab, label: 'Relatórios', icon: BarChart3 },
+    {
+      id: 'master-admin' as ActiveTab,
+      label: 'Painel Master',
+      icon: ShieldCheck,
+      badge: expiringClientsCount > 0 ? `${expiringClientsCount}` : undefined,
+      isWarning: expiringClientsCount > 0,
+      isMaster: true,
+    },
     { id: 'settings' as ActiveTab, label: 'Configurações', icon: Settings },
   ];
 
@@ -170,7 +190,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
                     isActive ? 'text-white' : 'text-slate-400 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400'
                   }`}
                 />
-                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="truncate flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <span
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          item.isWarning
+                            ? 'bg-amber-400 text-slate-950 font-extrabold shadow-2xs'
+                            : 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
             );
           })}

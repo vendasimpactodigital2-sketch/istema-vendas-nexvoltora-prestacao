@@ -15,11 +15,21 @@ import {
   Calendar,
   X,
   Building,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatPhone } from '../../lib/utils';
 
 export const ClientsView: React.FC = () => {
-  const { clients, addClient, updateClient, deleteClient, openQuickAction } = useApp();
+  const { clients, addClient, updateClient, deleteClient, openQuickAction, currentUser, setActiveTab, expiringClientsCount } = useApp();
+
+  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const isMasterUser =
+    userRole === 'master' ||
+    userRole === 'admin' ||
+    userRole === 'administrador' ||
+    userEmail === 'vendas.impactodigital2@gmail.com';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -131,6 +141,27 @@ export const ClientsView: React.FC = () => {
           <span>Cadastrar Cliente</span>
         </button>
       </div>
+
+      {/* Alerta de Clientes a Vencer para Administradores */}
+      {isMasterUser && expiringClientsCount > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </span>
+            <span>
+              <strong>Atenção Master:</strong> Existem <strong>{expiringClientsCount}</strong> cliente(s) / assinante(s) com período de teste prestes a vencer (≤ 5 dias)!
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('master-admin')}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shrink-0 cursor-pointer shadow-xs transition-all active:scale-95"
+          >
+            Abrir Painel Master →
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-3">

@@ -4,14 +4,29 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
-  const firebaseApiKey =
-    process.env.FIREBASE_API_KEY ||
-    'AIzaSyCsjm5EGc8KDj2kYNkZraoWqi0aAUjc8tQ';
+  const supabaseUrl =
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://zouhxmhjwnprmphhnxzs.supabase.co';
+
+  // Use the full valid key: VITE_SUPABASE_ANON_KEY contains 'sb_publishable_CGlCehfEI8l4myXL5jcURg_sV0xEDay'
+  let supabaseAnonKey =
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    '';
+
+  if (supabaseAnonKey.trim() === 'sb_publishable_CGlCehfEI8l4myXL5jcURg_sV0xE') {
+    supabaseAnonKey = 'sb_publishable_CGlCehfEI8l4myXL5jcURg_sV0xEDay';
+  }
+  if (!supabaseAnonKey || supabaseAnonKey.length < 20) {
+    supabaseAnonKey = 'sb_publishable_CGlCehfEI8l4myXL5jcURg_sV0xEDay';
+  }
 
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      'import.meta.env.VITE_FIREBASE_API_KEY': JSON.stringify(firebaseApiKey),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
     },
     resolve: {
       alias: {

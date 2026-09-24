@@ -2,7 +2,12 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { handleAsaasWebhook, checkSubscriptionStatusEndpoint } from "./src/server/asaasWebhook";
+import {
+  handleAsaasWebhook,
+  checkSubscriptionStatusEndpoint,
+  handleCreatePixEndpoint,
+  handleSimulateAsaasPaymentEndpoint,
+} from "./src/server/asaasWebhook";
 
 const currentDir = process.cwd();
 
@@ -45,6 +50,10 @@ async function startServer() {
 
   // Checagem de status de assinatura
   app.get("/api/subscription/status", checkSubscriptionStatusEndpoint);
+
+  // Cobrança Pix Asaas & Simulação
+  app.post("/api/asaas/create-pix", handleCreatePixEndpoint);
+  app.post("/api/asaas/simulate-confirm", handleSimulateAsaasPaymentEndpoint);
 
   // OCR & Extraction of Receipts / Invoices / Comprovantes
   app.post("/api/extract-receipt", async (req, res) => {

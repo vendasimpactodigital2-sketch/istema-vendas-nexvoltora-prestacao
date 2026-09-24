@@ -17,162 +17,150 @@ import { FinancialView } from './components/financial/FinancialView';
 import { TeamView } from './components/team/TeamView';
 import { ReportsView } from './components/reports/ReportsView';
 import { SettingsView } from './components/settings/SettingsView';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth, db, parseTrialDate } from './lib/firebase';
+import { MasterAdminView } from './components/admin/MasterAdminView';
+import { getSupabase, parseTrialDate, isTrialActive } from './lib/supabaseClient';
 import { User } from './types';
 
 const MainLayout: React.FC = () => {
   const { currentTab, isAuthenticated, isSubscriptionBlocked, sidebarCollapsed, currentUser, setCurrentUser } = useApp();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [isVerifyingFirestore, setIsVerifyingFirestore] = useState(true);
-  const [firestoreBlocked, setFirestoreBlocked] = useState(false);
+  const [isVerifyingSupabase, setIsVerifyingSupabase] = useState(false);
+  const [supabaseBlocked, setSupabaseBlocked] = useState(false);
 
-  // Verificação direta no Firestore para a rota usando o UID correto do usuário logado
+  // Verificação direta no Supabase para a rota usando o UID/e-mail do usuário logado
   useEffect(() => {
     let isMounted = true;
+    const supabase = getSupabase();
 
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      const loggedUid = fbUser?.uid || auth.currentUser?.uid || currentUser?.id;
+    if (!currentUser) {
+      setSupabaseBlocked(false);
+      setIsVerifyingSupabase(false);
+      return;
+    }
 
-      if (!loggedUid) {
-        if (isMounted) setIsVerifyingFirestore(false);
-        return;
-      }
-
-      console.log('[App.tsx] Buscando documento na coleção "users" usando o UID correto do usuário logado:', loggedUid);
-
+    const checkSubscription = async () => {
+      setIsVerifyingSupabase(true);
       try {
-        const userDocRef = doc(db, 'users', loggedUid);
-        const snap = await getDoc(userDocRef);
+        const loggedId = currentUser.id;
+        const loggedEmail = currentUser.email;
 
-        let data: any = null;
-        if (snap.exists()) {
-          data = snap.data();
-          console.log('[App.tsx] Documento do Firestore encontrado para o UID:', loggedUid, data);
-        } else {
-          // Busca secundária por query se o documento tiver ID gerado diferente do UID
-          const q = query(collection(db, 'users'), where('uid', '==', loggedUid));
-          const qSnap = await getDocs(q);
-          if (!qSnap.empty) {
-            data = qSnap.docs[0].data();
-            console.log('[App.tsx] Documento encontrado por query uid no Firestore:', data);
-          } else if (fbUser?.email) {
-            const qEmail = query(collection(db, 'users'), where('email', '==', fbUser.email));
-            const emailSnap = await getDocs(qEmail);
-            if (!emailSnap.empty) {
-              data = emailSnap.docs[0].data();
-              console.log('[App.tsx] Documento encontrado por query email no Firestore:', data);
+        let dbUser: any = null;
+        if (supabase) {
+          try {
+            const { data, error } = await supabase
+              .from('users')
+              .select('*')
+              .or(`id.eq.${loggedId},email.eq.${loggedEmail}`)
+              .maybeSingle();
+
+            if (!error && data) {
+              dbUser = data;
             }
+          } catch (e) {
+            console.warn('[App.tsx] Erro na consulta do Supabase:', e);
           }
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const rawStatus = (
+          dbUser?.subscription_status ||
+          dbUser?.subscriptionStatus ||
+          currentUser.subscription_status ||
+          currentUser.subscriptionStatus ||
+          'trial'
+        ).toString().trim().toLowerCase();
 
-        if (data) {
-          const rawStatus = (
-            data.subscriptionStatus ||
-            data.subscription_status ||
-            data.status ||
-            'trial'
-          ).toString().trim().toLowerCase();
+        const rawTrialEnd =
+          dbUser?.trial_end ||
+          dbUser?.trial_ends_at ||
+          dbUser?.trialEndsAt ||
+          currentUser.trial_end ||
+          currentUser.trial_ends_at ||
+          currentUser.trialEndsAt;
 
-          const parsedTrialEndsAt = parseTrialDate(
-            data.trialEndsAt ||
-            data.trial_ends_at ||
-            data.trialEndDate ||
-            data.trial_end
-          );
-
-          console.log('[App.tsx] Verificação de assinatura:', {
-            loggedUid,
-            rawStatus,
-            parsedTrialEndsAt,
-            todayStr,
-          });
-
-          // Regra de validação: bloqueia se estiver marcado como expirado/vencido/suspenso ou trial fora do prazo
-          let isExpired = false;
-          if (
-            rawStatus === 'expired' ||
-            rawStatus === 'vencido' ||
-            rawStatus === 'bloqueado' ||
-            rawStatus === 'inactive' ||
-            rawStatus === 'trial_expired' ||
-            rawStatus === 'cancelado' ||
-            rawStatus === 'suspenso'
-          ) {
-            isExpired = true;
-          } else if (rawStatus === 'trial') {
-            if (!parsedTrialEndsAt || todayStr > parsedTrialEndsAt) {
-              isExpired = true;
-            }
-          } else if (rawStatus !== 'active') {
-            isExpired = true;
+        let shouldBlock = false;
+        if (rawStatus === 'active' || rawStatus === 'ativo') {
+          shouldBlock = false;
+        } else if (rawStatus === 'trial' || rawStatus === 'teste') {
+          // Enquanto a data atual for anterior a trial_end, o utilizador DEVE ter acesso normal e total
+          if (!rawTrialEnd) {
+            shouldBlock = false;
+          } else {
+            const isTrialValid = isTrialActive(rawTrialEnd);
+            shouldBlock = !isTrialValid;
           }
-
-          let shouldBlock = isExpired || rawStatus !== 'active';
-
-          // Checagem em tempo real com o webhook do Asaas
-          if (shouldBlock) {
-            try {
-              const checkEmail = data.email || fbUser?.email || currentUser?.email || '';
-              const res = await fetch(`/api/subscription/status?email=${encodeURIComponent(checkEmail)}&uid=${encodeURIComponent(loggedUid)}`);
-              if (res.ok) {
-                const subStatus = await res.json();
-                if (subStatus.active || subStatus.subscriptionStatus === 'active') {
-                  console.log('[App.tsx] Pagamento confirmado pelo Asaas Webhook! Desbloqueando acesso.');
-                  shouldBlock = false;
-                  isExpired = false;
-                }
-              }
-            } catch (checkErr) {
-              // segue fluxo normal
-            }
-          }
-
-          if (isMounted) {
-            setFirestoreBlocked(shouldBlock);
-            
-            const updatedUser: User = {
-              ...currentUser,
-              id: loggedUid,
-              subscriptionStatus: shouldBlock ? 'expired' : 'active',
-              trialEndsAt: shouldBlock ? (parsedTrialEndsAt || currentUser?.trialEndsAt) : undefined,
-            } as User;
-            
-            setCurrentUser(updatedUser);
-            localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
-          }
+        } else if (
+          rawStatus === 'expired' ||
+          rawStatus === 'vencido' ||
+          rawStatus === 'bloqueado' ||
+          rawStatus === 'inactive' ||
+          rawStatus === 'cancelado' ||
+          rawStatus === 'trial_expired'
+        ) {
+          shouldBlock = true;
         } else {
-          // Se o documento não foi encontrado de forma direta, verifica com o webhook antes de bloquear
-          let shouldBlock = true;
+          shouldBlock = true;
+        }
+
+        // Checagem em tempo real com o webhook do Asaas se estiver bloqueado
+        if (shouldBlock) {
           try {
-            const checkEmail = fbUser?.email || currentUser?.email || '';
-            const res = await fetch(`/api/subscription/status?email=${encodeURIComponent(checkEmail)}&uid=${encodeURIComponent(loggedUid)}`);
+            const checkEmail = dbUser?.email || loggedEmail || '';
+            const res = await fetch(
+              `/api/subscription/status?email=${encodeURIComponent(checkEmail)}&uid=${encodeURIComponent(loggedId)}`
+            );
             if (res.ok) {
               const subStatus = await res.json();
               if (subStatus.active || subStatus.subscriptionStatus === 'active') {
+                console.log('[App.tsx] Pagamento confirmado pelo Asaas Webhook! Desbloqueando acesso.');
                 shouldBlock = false;
               }
             }
-          } catch (e) {}
+          } catch (checkErr) {
+            // segue fluxo normal
+          }
+        }
 
-          if (isMounted) setFirestoreBlocked(shouldBlock);
+        if (isMounted) {
+          setSupabaseBlocked(shouldBlock);
+
+          const finalStatus = shouldBlock
+            ? 'expired'
+            : (rawStatus === 'active' ? 'active' : 'trial');
+
+          const effectiveTrialEnd = rawTrialEnd || new Date(Date.now() + 15 * 86400000).toISOString();
+          const effectiveTrialEndDate = effectiveTrialEnd.split('T')[0];
+
+          const updatedUser: User = {
+            ...currentUser,
+            subscriptionStatus: finalStatus,
+            subscription_status: finalStatus,
+            trialEndsAt: effectiveTrialEndDate,
+            trial_ends_at: effectiveTrialEndDate,
+            trial_end: effectiveTrialEnd,
+            trial_start: dbUser?.trial_start || currentUser.trial_start || new Date().toISOString(),
+          };
+
+          if (
+            currentUser.subscriptionStatus !== finalStatus ||
+            currentUser.trial_end !== effectiveTrialEnd
+          ) {
+            setCurrentUser(updatedUser);
+            localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
+          }
         }
       } catch (err) {
-        console.error('[App.tsx] Erro ao ler documento do usuário no Firestore:', err);
-        if (isMounted) setFirestoreBlocked(true);
+        console.error('[App.tsx] Erro ao verificar assinatura:', err);
       } finally {
-        if (isMounted) setIsVerifyingFirestore(false);
+        if (isMounted) setIsVerifyingSupabase(false);
       }
-    });
+    };
+
+    checkSubscription();
 
     return () => {
       isMounted = false;
-      unsubscribe();
     };
-  }, []);
+  }, [currentUser?.id, currentUser?.email]);
 
   // Sempre que abrir o programa sem usuário autenticado, exibe a tela de login por padrão
   if (!isAuthenticated || !currentUser) {
@@ -184,8 +172,8 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  // Enquanto valida o Firestore para o usuário recém-logado
-  if (isVerifyingFirestore) {
+  // Enquanto valida o Supabase para o usuário recém-logado
+  if (isVerifyingSupabase) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-white p-4">
         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
@@ -194,8 +182,18 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  // Bloqueio Total: se o Firestore indicou bloqueio ou se o estado local aponta expiração
-  const shouldBlockAccess = firestoreBlocked || isSubscriptionBlocked || currentUser?.subscriptionStatus === 'expired';
+  // Bloqueio Total: apenas para clientes que não forem master/admin quando expirar ou estiver bloqueado
+  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const isMasterOrAdmin =
+    userRole === 'master' ||
+    userRole === 'admin' ||
+    userRole === 'administrador' ||
+    userEmail === 'vendas.impactodigital2@gmail.com';
+
+  const shouldBlockAccess =
+    !isMasterOrAdmin &&
+    (supabaseBlocked || isSubscriptionBlocked || currentUser?.subscriptionStatus === 'expired');
 
   if (shouldBlockAccess) {
     return (
@@ -206,7 +204,7 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  const renderCurrentView = () => {
+  const renderContent = () => {
     switch (currentTab) {
       case 'dashboard':
         return <DashboardView />;
@@ -228,41 +226,56 @@ const MainLayout: React.FC = () => {
         return <ReportsView />;
       case 'settings':
         return <SettingsView />;
+      case 'master-admin':
+        return <MasterAdminView />;
       default:
         return <DashboardView />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex transition-colors duration-200">
-      {/* Sidebar navigation */}
-      <Sidebar mobileOpen={mobileSidebarOpen} onCloseMobile={() => setMobileSidebarOpen(false)} />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors">
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar Desktop */}
+        <Sidebar
+          mobileOpen={mobileSidebarOpen}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
+        />
 
-      {/* Main Content Area */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
-        <Header onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
+        {/* Mobile Navigation Drawer */}
+        <MobileNav
+          isOpen={mobileSidebarOpen}
+          onClose={() => setMobileSidebarOpen(false)}
+        />
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 max-w-7xl w-full mx-auto pb-24 md:pb-12">
-          {renderCurrentView()}
-        </main>
+        {/* Main Content Area */}
+        <div
+          className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
+            sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'
+          }`}
+        >
+          <Header onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
+
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
+            <div className="max-w-7xl mx-auto w-full">
+              {renderContent()}
+            </div>
+          </main>
+        </div>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <MobileNav />
-
-      {/* Global Search Modal (Ctrl+K or Header search) */}
       <GlobalSearchModal />
-
-      {/* Notification and Action Toasts */}
       <ToastContainer />
     </div>
   );
 };
 
-export default function App() {
+export const App: React.FC = () => {
   return (
     <AppProvider>
       <MainLayout />
     </AppProvider>
   );
-}
+};
+
+export default App;

@@ -10,12 +10,21 @@ import {
   FileText,
   DollarSign,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 import { ActiveTab } from '../../types';
 
 export const MobileNav: React.FC = () => {
-  const { activeTab, setActiveTab, openQuickAction } = useApp();
+  const { activeTab, setActiveTab, openQuickAction, currentUser, expiringClientsCount } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const isMasterUser =
+    userRole === 'master' ||
+    userRole === 'admin' ||
+    userRole === 'administrador' ||
+    userEmail === 'vendas.impactodigital2@gmail.com';
 
   const navItems = [
     { id: 'dashboard' as ActiveTab, label: 'Início', icon: LayoutDashboard },
@@ -148,6 +157,31 @@ export const MobileNav: React.FC = () => {
                   <p className="text-[10px] text-slate-500">Material ou equipe</p>
                 </div>
               </button>
+
+              {isMasterUser && (
+                <button
+                  onClick={() => {
+                    setSheetOpen(false);
+                    setActiveTab('master-admin');
+                  }}
+                  className="col-span-2 flex items-center justify-between p-3 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/40 text-left hover:bg-amber-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shadow-xs">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-900 dark:text-white">Painel Master</p>
+                      <p className="text-[10px] text-slate-500">Gestão de assinaturas & clientes</p>
+                    </div>
+                  </div>
+                  {expiringClientsCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500 text-slate-950 font-black">
+                      {expiringClientsCount} a vencer
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

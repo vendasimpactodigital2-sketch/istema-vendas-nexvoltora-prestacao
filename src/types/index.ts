@@ -1,4 +1,12 @@
-export type UserRole = 'ADMINISTRADOR' | 'GERENTE' | 'ORÇAMENTISTA' | 'FUNCIONÁRIO';
+export type UserRole =
+  | 'ADMINISTRADOR'
+  | 'GERENTE'
+  | 'ORÇAMENTISTA'
+  | 'FUNCIONÁRIO'
+  | 'master'
+  | 'admin'
+  | 'MASTER'
+  | 'ADMIN';
 
 export interface Company {
   id: string;
@@ -19,6 +27,7 @@ export interface Company {
   state: string;
   zip_code: string; // CEP
   logo_url: string;
+  pix_key?: string;
 }
 
 export interface User {
@@ -34,7 +43,11 @@ export interface User {
   active: boolean;
   created_at: string;
   subscriptionStatus?: 'trial' | 'active' | 'expired' | 'canceled' | string;
+  subscription_status?: 'trial' | 'active' | 'expired' | 'canceled' | string;
   trialEndsAt?: string; // AAAA-MM-DD
+  trial_ends_at?: string;
+  trial_start?: string; // Data e hora atual de início do trial
+  trial_end?: string; // Data e hora atual de término do trial (atual + 15 dias)
 }
 
 export interface Client {
@@ -285,7 +298,7 @@ export interface FinancialExpense {
   description: string;
   amount: number;
   date: string; // YYYY-MM-DD
-  supplier: string;
+  supplier?: string;
   payment_method: PaymentMethod;
   status: FinancialStatus;
   created_at: string;
@@ -311,4 +324,5 @@ export type ActiveTab =
   | 'financial'
   | 'team'
   | 'reports'
-  | 'settings';
+  | 'settings'
+  | 'master-admin';

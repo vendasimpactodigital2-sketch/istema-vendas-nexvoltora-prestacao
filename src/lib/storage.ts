@@ -34,6 +34,9 @@ export const INITIAL_COMPANY: Company = {
   logo_url: '/nexvoltora.png',
 };
 
+const _nowMs = Date.now();
+const _dayMs = 24 * 60 * 60 * 1000;
+
 export const INITIAL_USERS: User[] = [
   {
     id: 'usr_fabio',
@@ -47,11 +50,15 @@ export const INITIAL_USERS: User[] = [
     active: true,
     created_at: '2025-01-10',
     subscriptionStatus: 'active',
+    subscription_status: 'active',
+    trial_start: new Date(_nowMs - 30 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 30 * _dayMs).toISOString(),
+    trialEndsAt: new Date(_nowMs + 30 * _dayMs).toISOString().split('T')[0],
   },
   {
     id: 'usr_marcos',
     company_id: DEFAULT_COMPANY_ID,
-    name: 'Marcos Rezende',
+    name: 'Marcos Rezende (Eletrotécnica Rezende)',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
     role: 'GERENTE',
     phone: '(11) 97654-3210',
@@ -59,12 +66,16 @@ export const INITIAL_USERS: User[] = [
     email: 'marcos@oziservicos.com.br',
     active: true,
     created_at: '2025-01-15',
-    subscriptionStatus: 'active',
+    subscriptionStatus: 'trial',
+    subscription_status: 'trial',
+    trial_start: new Date(_nowMs - 14 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 1 * _dayMs).toISOString(), // 1 dia restante -> 🚨 Expira hoje / amanhã
+    trialEndsAt: new Date(_nowMs + 1 * _dayMs).toISOString().split('T')[0],
   },
   {
     id: 'usr_larissa',
     company_id: DEFAULT_COMPANY_ID,
-    name: 'Larissa Alencar',
+    name: 'Larissa Alencar (Alencar Pinturas)',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
     role: 'ORÇAMENTISTA',
     phone: '(11) 96543-2109',
@@ -72,12 +83,16 @@ export const INITIAL_USERS: User[] = [
     email: 'larissa@oziservicos.com.br',
     active: true,
     created_at: '2025-02-01',
-    subscriptionStatus: 'active',
+    subscriptionStatus: 'trial',
+    subscription_status: 'trial',
+    trial_start: new Date(_nowMs - 12 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 3 * _dayMs).toISOString(), // 3 dias restantes -> ⚠️ Restam 3 dias
+    trialEndsAt: new Date(_nowMs + 3 * _dayMs).toISOString().split('T')[0],
   },
   {
     id: 'usr_joao',
     company_id: DEFAULT_COMPANY_ID,
-    name: 'João Pedro Mestre',
+    name: 'João Pedro Mestre (Mestre Reformas)',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
     role: 'FUNCIONÁRIO',
     phone: '(11) 95432-1098',
@@ -85,7 +100,45 @@ export const INITIAL_USERS: User[] = [
     email: 'joao.obras@oziservicos.com.br',
     active: true,
     created_at: '2025-02-05',
-    subscriptionStatus: 'active',
+    subscriptionStatus: 'trial',
+    subscription_status: 'trial',
+    trial_start: new Date(_nowMs - 10 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 5 * _dayMs).toISOString(), // 5 dias restantes -> ⚠️ Restam 5 dias
+    trialEndsAt: new Date(_nowMs + 5 * _dayMs).toISOString().split('T')[0],
+  },
+  {
+    id: 'usr_rodrigo',
+    company_id: DEFAULT_COMPANY_ID,
+    name: 'Rodrigo Silva (R.S Climatização)',
+    avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=120&auto=format&fit=crop&q=80',
+    role: 'ADMINISTRADOR',
+    phone: '(11) 94321-8765',
+    whatsapp: '(11) 94321-8765',
+    email: 'rodrigo.clima@gmail.com',
+    active: true,
+    created_at: '2025-02-10',
+    subscriptionStatus: 'expired',
+    subscription_status: 'expired',
+    trial_start: new Date(_nowMs - 20 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs - 2 * _dayMs).toISOString(), // Já venceu -> 🚨 Expirado
+    trialEndsAt: new Date(_nowMs - 2 * _dayMs).toISOString().split('T')[0],
+  },
+  {
+    id: 'usr_carolina',
+    company_id: DEFAULT_COMPANY_ID,
+    name: 'Carolina Mendes (Mendes Construções)',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
+    role: 'ADMINISTRADOR',
+    phone: '(11) 93210-9876',
+    whatsapp: '(11) 93210-9876',
+    email: 'carolina.mendes@mendescon.com.br',
+    active: true,
+    created_at: '2025-02-15',
+    subscriptionStatus: 'trial',
+    subscription_status: 'trial',
+    trial_start: new Date(_nowMs - 1 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 14 * _dayMs).toISOString(), // 14 dias restantes
+    trialEndsAt: new Date(_nowMs + 14 * _dayMs).toISOString().split('T')[0],
   },
 ];
 
