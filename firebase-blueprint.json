@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Usuário do sistema e permissões",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "company_id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "avatar": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMINISTRADOR", "GERENTE", "ORÇAMENTISTA", "FUNCIONÁRIO"] },
+        "phone": { "type": "string", "maxLength": 30 },
+        "whatsapp": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "format": "email", "maxLength": 120 },
+        "active": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "subscriptionStatus": { "type": "string", "enum": ["trial", "active", "expired", "canceled"] },
+        "trialEndsAt": { "type": "string", "description": "Data limite do período grátis no formato AAAA-MM-DD" }
+      },
+      "required": ["id", "email", "name", "role", "active"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Dados da empresa prestadora de serviços",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "trade_name": { "type": "string", "maxLength": 120 },
+        "legal_name": { "type": "string", "maxLength": 150 },
+        "cnpj": { "type": "string", "maxLength": 30 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "whatsapp": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "format": "email" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "logo_url": { "type": "string" }
+      },
+      "required": ["id", "trade_name", "email"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Cliente cadastrado para orçamentos e obras",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "company_id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 120 },
+        "document": { "type": "string", "maxLength": 30 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "whatsapp": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "format": "email" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Orçamento de serviços e materiais",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "company_id": { "type": "string" },
+        "client_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string" },
+        "date": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "code", "client_name", "total", "status"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Obra ou serviço em execução",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "company_id": { "type": "string" },
+        "client_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "total_value": { "type": "number" },
+        "received_value": { "type": "number" },
+        "progress": { "type": "number" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "code", "name", "status"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Agendamento de visita técnica ou serviço",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "company_id": { "type": "string" },
+        "client_name": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "service_type": { "type": "string" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["id", "client_name", "date", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Perfis de usuários e permissões do sistema"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Configurações da empresa"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Clientes da prestadora de serviço"
+    },
+    "/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Orçamentos e propostas comerciais"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Obras e projetos de serviços"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Visitas e agendamentos de serviços"
+    }
+  }
+}

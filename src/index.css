@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html.dark {
+    color-scheme: dark;
+  }
+  html:not(.dark) {
+    color-scheme: light;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+
+  /* Universal high-contrast, beautiful form controls styling */
+  input, select, textarea {
+    color: #0f172a;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .dark input, .dark select, .dark textarea {
+    color: #f8fafc !important;
+  }
+
+  /* High contrast readable placeholders */
+  input::placeholder, textarea::placeholder {
+    color: #94a3b8;
+  }
+  .dark input::placeholder, .dark textarea::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  /* Ensure options inside select tags are completely legible on all browsers */
+  option {
+    background-color: #ffffff;
+    color: #0f172a;
+    padding: 8px;
+  }
+
+  .dark option {
+    background-color: #1e293b !important;
+    color: #f8fafc !important;
+  }
+
+  /* Native date/time picker icon styling */
+  .dark input[type="date"]::-webkit-calendar-picker-indicator,
+  .dark input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.85;
+    cursor: pointer;
+  }
+}
+
+/* Custom smooth scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Regras de impressão para folha única A4 vertical (210x297mm) com assinaturas no final */
+@media print {
+  @page {
+    size: A4 portrait; /* 210mm x 297mm vertical */
+    margin: 8mm 10mm;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #020617 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  #printable-quote {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 280mm !important;
+    max-height: 280mm !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+

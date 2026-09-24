@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <script>
+      (function() {
+        try {
+          var win = typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : null;
+          if (!win || !win.fetch) return;
+          var _origFetch = win.fetch.bind(win);
+          var _currFetch = _origFetch;
+          try {
+            Object.defineProperty(win, 'fetch', {
+              get: function() { return _currFetch; },
+              set: function(fn) { _currFetch = fn; },
+              configurable: true,
+              enumerable: true
+            });
+          } catch (e1) {
+            try {
+              if (win.Window && win.Window.prototype) {
+                Object.defineProperty(win.Window.prototype, 'fetch', {
+                  get: function() { return _currFetch; },
+                  set: function(fn) { _currFetch = fn; },
+                  configurable: true,
+                  enumerable: true
+                });
+              }
+            } catch (e2) {}
+          }
+        } catch (err) {}
+      })();
+    </script>
+    <title>Nexvoltora - Gestão e Prestação de Serviços</title>
+    <meta name="description" content="Nexvoltora - Sistema completo para gestão e prestação de serviços, obras, orçamentos, agendamentos e controle financeiro." />
+    <meta property="og:title" content="Nexvoltora - Gestão e Prestação de Serviços" />
+    <meta property="og:description" content="Nexvoltora - Sistema completo para gestão e prestação de serviços, obras, orçamentos, agendamentos e controle financeiro." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+      @media print {
+        body {
+          background: white !important;
+          color: black !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

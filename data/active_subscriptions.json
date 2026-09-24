@@ -1,0 +1,12 @@
+{
+  "fabio.icloud05@gmail.com": {
+    "email": "fabio.icloud05@gmail.com",
+    "paymentId": "pay_test_123456",
+    "value": 26.99,
+    "billingType": "PIX",
+    "event": "PAYMENT_RECEIVED",
+    "status": "active",
+    "subscriptionStatus": "active",
+    "activatedAt": "2026-09-23T20:48:02.530Z"
+  }
+}
