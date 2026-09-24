@@ -47,13 +47,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
     expiringClientsCount,
   } = useApp();
 
-  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
-  const isMasterUser =
-    userRole === 'master' ||
-    userRole === 'admin' ||
-    userRole === 'administrador' ||
-    userEmail === 'vendas.impactodigital2@gmail.com';
+  // EXCLUSIVIDADE ABSOLUTA DO MASTER: Apenas e estritamente vendas.impactodigital2@gmail.com
+  const isMaster = userEmail === 'vendas.impactodigital2@gmail.com';
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -108,8 +104,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
 
       {/* Right side controls */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Master Admin: Expirando em ≤ 5 dias alerta no Header */}
-        {isMasterUser && expiringClientsCount > 0 && (
+        {/* Master Admin: Expirando em ≤ 5 dias alerta no Header (Apenas Master) */}
+        {isMaster && expiringClientsCount > 0 && (
           <button
             type="button"
             onClick={() => setActiveTab('master-admin')}
@@ -350,33 +346,35 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
               </div>
 
               <div className="py-1">
-                {/* Botão de teste para simular expiração de teste ou ativação */}
-                <div className="px-3 py-1.5 mb-1 bg-slate-50 dark:bg-slate-800/50 rounded-lg mx-2 text-[11px]">
-                  <div className="text-slate-500 font-medium mb-1">Simular Período de Teste:</div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        setSubscriptionForTesting('expired', '2020-01-01');
-                      }}
-                      className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-semibold text-[10px] transition-colors"
-                      title="Simula 15 dias vencidos para testar a tela de bloqueio"
-                    >
-                      Expirar Teste
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        setSubscriptionForTesting('trial', calculateTrialEndsAt(15));
-                      }}
-                      className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold text-[10px] transition-colors"
-                      title="Ativa teste de 15 dias"
-                    >
-                      Resetar 15 Dias
-                    </button>
+                {/* Botão de teste para simular expiração de teste ou ativação (Apenas Master) */}
+                {isMaster && (
+                  <div className="px-3 py-1.5 mb-1 bg-slate-50 dark:bg-slate-800/50 rounded-lg mx-2 text-[11px]">
+                    <div className="text-slate-500 font-medium mb-1">Simular Período de Teste:</div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setSubscriptionForTesting('expired', '2020-01-01');
+                        }}
+                        className="px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-semibold text-[10px] transition-colors"
+                        title="Simula 15 dias vencidos para testar a tela de bloqueio"
+                      >
+                        Expirar Teste
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false);
+                          setSubscriptionForTesting('trial', calculateTrialEndsAt(15));
+                        }}
+                        className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold text-[10px] transition-colors"
+                        title="Ativa teste de 15 dias"
+                      >
+                        Resetar 15 Dias
+                      </button>
+                    </div>
                   </div>
-                </div>
-                {isMasterUser && (
+                )}
+                {isMaster && (
                   <button
                     onClick={() => {
                       setShowUserMenu(false);

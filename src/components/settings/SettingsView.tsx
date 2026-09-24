@@ -44,13 +44,9 @@ export const SettingsView: React.FC = () => {
     expiringClientsCount,
   } = useApp();
 
-  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
-  const isMasterUser =
-    userRole === 'master' ||
-    userRole === 'admin' ||
-    userRole === 'administrador' ||
-    userEmail === 'vendas.impactodigital2@gmail.com';
+  // EXCLUSIVIDADE ABSOLUTA DO MASTER: Apenas e estritamente vendas.impactodigital2@gmail.com
+  const isMaster = userEmail === 'vendas.impactodigital2@gmail.com';
 
   const [isRenewingTrial, setIsRenewingTrial] = useState(false);
   const [isActivatingDirect, setIsActivatingDirect] = useState(false);
@@ -379,8 +375,8 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Banner de Acesso ao Painel Administrativo Master */}
-        {isMasterUser && (
+        {/* Banner de Acesso ao Painel Administrativo Master (Apenas Master) */}
+        {isMaster && (
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-500/10 p-3.5 rounded-2xl border border-amber-500/20">
             <div className="flex items-center gap-2.5">
               <span className="p-2 rounded-xl bg-amber-500 text-slate-950 font-bold">

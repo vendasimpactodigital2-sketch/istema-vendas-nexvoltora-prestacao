@@ -48,6 +48,8 @@ export const SubscriptionBlockedView: React.FC = () => {
   const [isUnlockedSuccess, setIsUnlockedSuccess] = useState(false);
   const [isRenewingTrial, setIsRenewingTrial] = useState(false);
 
+  const isMaster = currentUser?.email?.toLowerCase().trim() === 'vendas.impactodigital2@gmail.com';
+
   const ASAAS_CHECKOUT_URL = 'https://www.asaas.com/c/a7wa52vfwn1sq35p';
 
   // 3. Configura a escuta no Supabase (Realtime Channel + Polling de Contingência)
@@ -352,20 +354,22 @@ export const SubscriptionBlockedView: React.FC = () => {
               </a>
             </div>
 
-            {/* Botão de Renovação do Trial de 15 Dias */}
-            <button
-              type="button"
-              onClick={handleRenewTrial}
-              disabled={isRenewingTrial}
-              className="w-full py-3 px-6 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white font-semibold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 mt-2"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRenewingTrial ? 'animate-spin' : ''}`} />
-              <span>
-                {isRenewingTrial
-                  ? 'Renovando período no Supabase...'
-                  : 'Renovar Teste Grátis (15 Dias a partir de Hoje)'}
-              </span>
-            </button>
+            {/* Botão de Renovação do Trial de 15 Dias (Apenas Master) */}
+            {isMaster && (
+              <button
+                type="button"
+                onClick={handleRenewTrial}
+                disabled={isRenewingTrial}
+                className="w-full py-3 px-6 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white font-semibold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 mt-2"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRenewingTrial ? 'animate-spin' : ''}`} />
+                <span>
+                  {isRenewingTrial
+                    ? 'Renovando período no Supabase...'
+                    : 'Renovar Teste Grátis (15 Dias - Modo Master)'}
+                </span>
+              </button>
+            )}
 
             <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500 pt-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -472,18 +476,20 @@ export const SubscriptionBlockedView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Botão de Teste / Simulação do Webhook */}
+                {/* Botão de Teste / Simulação do Webhook (Apenas Master) */}
                 <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSimulateWebhook}
-                    disabled={isSimulating}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                    title="Simula o evento PAYMENT_RECEIVED do Asaas no Supabase para validar a escuta"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
-                    <span>{isSimulating ? 'Confirmando...' : 'Simular Confirmação Asaas (Teste)'}</span>
-                  </button>
+                  {isMaster ? (
+                    <button
+                      type="button"
+                      onClick={handleSimulateWebhook}
+                      disabled={isSimulating}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      title="Simula o evento PAYMENT_RECEIVED do Asaas no Supabase para validar a escuta"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
+                      <span>{isSimulating ? 'Confirmando...' : 'Simular Confirmação Asaas (Teste Master)'}</span>
+                    </button>
+                  ) : <div />}
 
                   <button
                     type="button"

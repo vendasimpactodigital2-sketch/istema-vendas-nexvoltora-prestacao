@@ -22,13 +22,9 @@ import { formatPhone } from '../../lib/utils';
 export const ClientsView: React.FC = () => {
   const { clients, addClient, updateClient, deleteClient, openQuickAction, currentUser, setActiveTab, expiringClientsCount } = useApp();
 
-  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
-  const isMasterUser =
-    userRole === 'master' ||
-    userRole === 'admin' ||
-    userRole === 'administrador' ||
-    userEmail === 'vendas.impactodigital2@gmail.com';
+  // EXCLUSIVIDADE ABSOLUTA DO MASTER: Apenas e estritamente vendas.impactodigital2@gmail.com
+  const isMaster = userEmail === 'vendas.impactodigital2@gmail.com';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -142,8 +138,8 @@ export const ClientsView: React.FC = () => {
         </button>
       </div>
 
-      {/* Alerta de Clientes a Vencer para Administradores */}
-      {isMasterUser && expiringClientsCount > 0 && (
+      {/* Alerta de Clientes a Vencer para Administradores (Apenas Master) */}
+      {isMaster && expiringClientsCount > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs">
           <div className="flex items-center gap-2.5">
             <span className="p-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold shrink-0">

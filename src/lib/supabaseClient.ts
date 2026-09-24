@@ -179,13 +179,17 @@ export async function signUpWithSupabase(
     throw new Error('Supabase não configurado. Adicione a URL e Chave Anon nas Configurações.');
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+  const userIsMaster = cleanEmail === MASTER_EMAIL;
+  const effectiveRole: UserRole = userIsMaster ? 'MASTER' : 'CLIENT';
+
   let res = await supabase.auth.signUp({
-    email: email.trim().toLowerCase(),
+    email: cleanEmail,
     password,
     options: {
       data: {
         name: extra.name.trim(),
-        role: extra.role,
+        role: effectiveRole,
         phone: extra.phone || '',
         whatsapp: extra.whatsapp || '',
         company_id: extra.company_id || 'comp_ozi_01',
@@ -200,12 +204,12 @@ export async function signUpWithSupabase(
     supabase = getSupabase(true);
     if (supabase) {
       res = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: cleanEmail,
         password,
         options: {
           data: {
             name: extra.name.trim(),
-            role: extra.role,
+            role: effectiveRole,
             phone: extra.phone || '',
             whatsapp: extra.whatsapp || '',
             company_id: extra.company_id || 'comp_ozi_01',
@@ -226,10 +230,10 @@ export async function signUpWithSupabase(
     id: userId,
     company_id: extra.company_id || 'comp_ozi_01',
     name: extra.name.trim(),
-    email: email.trim().toLowerCase(),
+    email: cleanEmail,
     phone: extra.phone || '(11) 98765-4321',
     whatsapp: extra.whatsapp || extra.phone || '(11) 98765-4321',
-    role: extra.role,
+    role: effectiveRole,
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
     active: true,
     created_at: trialDates.trial_start,
@@ -376,16 +380,52 @@ export interface SubscriptionStatusInfo {
   daysRemaining?: number;
 }
 
+export const MASTER_EMAIL = 'vendas.impactodigital2@gmail.com';
+
+/**
+ * EXCLUSIVIDADE ABSOLUTA DO MASTER:
+ * Apenas e estritamente o e-mail 'vendas.impactodigital2@gmail.com' tem acesso master e imunidade a bloqueios.
+ * NUNCA usar 'role === admin' ou 'role === administrador' para isenção.
+ */
+export function isMasterUser(user?: { email?: string | null; role?: string } | null): boolean {
+  if (!user || !user.email) return false;
+  return user.email.toLowerCase().trim() === MASTER_EMAIL;
+}
+
 export function evaluateSubscription(user: Partial<User> | null | undefined): SubscriptionStatusInfo {
   if (!user) {
-    return { isBlocked: false, status: 'unknown', isExpired: false };
+    return { isBlocked: false, status: 'unknown', isExpired: false, daysRemaining: 0 };
+  }
+
+  // 1. EXCLUSIVIDADE ABSOLUTA DO MASTER:
+  // Apenas e estritamente 'vendas.impactodigital2@gmail.com' tem isenção e acesso irrestrito
+  if (isMasterUser(user)) {
+    return {
+      isBlocked: false,
+      status: 'active',
+      isExpired: false,
+      daysRemaining: 9999,
+    };
+  }
+
+  // 2. QUALQUER OUTRO USUÁRIO (inclusive quem tiver role admin ou administrador):
+  // NUNCA conceder imunidade por role!
+
+  // Se estiver marcado como bloqueado no banco
+  if ((user as any).is_blocked === true || (user as any).isBlocked === true) {
+    return {
+      isBlocked: true,
+      status: 'blocked',
+      isExpired: true,
+      daysRemaining: 0,
+    };
   }
 
   const rawStatus = (
     user.subscriptionStatus ||
     user.subscription_status ||
     (user as any).status ||
-    'trial'
+    ''
   ).toString().trim().toLowerCase();
 
   const trialEndVal =
@@ -394,9 +434,7 @@ export function evaluateSubscription(user: Partial<User> | null | undefined): Su
     user.trialEndsAt ||
     (user as any).trialEndDate;
 
-  const now = new Date();
-
-  // Status ativo: acesso garantido e irrestrito
+  // Status ativo (pago) confirmado
   if (rawStatus === 'active' || rawStatus === 'ativo') {
     return {
       isBlocked: false,
@@ -404,48 +442,11 @@ export function evaluateSubscription(user: Partial<User> | null | undefined): Su
       trialEndsAt: trialEndVal ? trialEndVal.split('T')[0] : undefined,
       trialEnd: trialEndVal || undefined,
       isExpired: false,
+      daysRemaining: 30,
     };
   }
 
-  // Período de teste grátis (trial)
-  if (rawStatus === 'trial' || rawStatus === 'teste' || !rawStatus) {
-    const effectiveTrialEnd = trialEndVal || new Date(now.getTime() + 15 * 86400000).toISOString();
-    const active = isTrialActive(effectiveTrialEnd);
-
-    if (active) {
-      let daysRemaining = 15;
-      try {
-        const endDate = effectiveTrialEnd.includes('T')
-          ? new Date(effectiveTrialEnd)
-          : new Date(`${effectiveTrialEnd}T23:59:59.999Z`);
-        const diffMs = endDate.getTime() - now.getTime();
-        daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-      } catch (e) {
-        daysRemaining = 15;
-      }
-
-      return {
-        isBlocked: false, // Acesso normal e irrestrito durante o período de teste
-        status: 'trial',
-        trialEndsAt: effectiveTrialEnd.split('T')[0],
-        trialEnd: effectiveTrialEnd,
-        isExpired: false,
-        daysRemaining,
-      };
-    } else {
-      // Período de teste efetivamente expirou (data atual posterior a trial_end)
-      return {
-        isBlocked: true,
-        status: 'expired',
-        trialEndsAt: effectiveTrialEnd.split('T')[0],
-        trialEnd: effectiveTrialEnd,
-        isExpired: true,
-        daysRemaining: 0,
-      };
-    }
-  }
-
-  // Casos explicitamente expirados ou cancelados
+  // Casos explicitamente expirados ou bloqueados
   if (
     rawStatus === 'expired' ||
     rawStatus === 'vencido' ||
@@ -464,25 +465,61 @@ export function evaluateSubscription(user: Partial<User> | null | undefined): Su
     };
   }
 
-  // Fallback: se trialEndVal estiver ativo com base no tempo atual, concede acesso
-  if (trialEndVal && isTrialActive(trialEndVal)) {
+  // Se não tiver data de término de teste registrada, bloqueia imediatamente
+  if (!trialEndVal) {
     return {
-      isBlocked: false,
-      status: 'trial',
+      isBlocked: true,
+      status: 'expired',
+      isExpired: true,
+      daysRemaining: 0,
+    };
+  }
+
+  // Validação estrita de data/hora do trial
+  const isStillActive = isTrialActive(trialEndVal);
+  if (!isStillActive) {
+    return {
+      isBlocked: true,
+      status: 'expired',
       trialEndsAt: trialEndVal.split('T')[0],
       trialEnd: trialEndVal,
-      isExpired: false,
-      daysRemaining: 15,
+      isExpired: true,
+      daysRemaining: 0,
+    };
+  }
+
+  // Calcular dias restantes exatos
+  let daysRemaining = 0;
+  try {
+    const now = new Date();
+    const endDate = trialEndVal.includes('T')
+      ? new Date(trialEndVal)
+      : new Date(`${trialEndVal}T23:59:59.999Z`);
+    const diffMs = endDate.getTime() - now.getTime();
+    daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  } catch (e) {
+    daysRemaining = 0;
+  }
+
+  // Se dias restantes for 0 (Teste: 0d), bloqueia imediatamente!
+  if (daysRemaining <= 0) {
+    return {
+      isBlocked: true,
+      status: 'expired',
+      trialEndsAt: trialEndVal.split('T')[0],
+      trialEnd: trialEndVal,
+      isExpired: true,
+      daysRemaining: 0,
     };
   }
 
   return {
-    isBlocked: true,
-    status: rawStatus,
-    trialEndsAt: trialEndVal ? trialEndVal.split('T')[0] : undefined,
-    trialEnd: trialEndVal || undefined,
-    isExpired: true,
-    daysRemaining: 0,
+    isBlocked: false,
+    status: 'trial',
+    trialEndsAt: trialEndVal.split('T')[0],
+    trialEnd: trialEndVal,
+    isExpired: false,
+    daysRemaining,
   };
 }
 
@@ -568,6 +605,10 @@ export async function verifyUserSubscriptionInSupabase(userId: string, email?: s
           ? effectiveTrialEnd.split('T')[0]
           : calculateTrialEndsAt(15);
 
+        const cleanEmail = (data.email || email || '').toLowerCase().trim();
+        const userIsMaster = cleanEmail === MASTER_EMAIL;
+        const effectiveRole: UserRole = userIsMaster ? 'MASTER' : 'CLIENT';
+
         return {
           id: data.id,
           company_id: data.company_id || 'comp_ozi_01',
@@ -575,7 +616,7 @@ export async function verifyUserSubscriptionInSupabase(userId: string, email?: s
           email: data.email || email || '',
           phone: data.phone || '(11) 98765-4321',
           whatsapp: data.whatsapp || data.phone || '(11) 98765-4321',
-          role: data.role || 'ADMINISTRADOR',
+          role: effectiveRole,
           avatar: data.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
           active: data.active ?? true,
           created_at: data.created_at || now.toISOString(),
@@ -594,6 +635,10 @@ export async function verifyUserSubscriptionInSupabase(userId: string, email?: s
 
   // Fallback seguro: 15 dias de teste a partir de hoje
   const trialDates = calculateTrialEndDates(15);
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const userIsMaster = cleanEmail === MASTER_EMAIL;
+  const effectiveRole: UserRole = userIsMaster ? 'MASTER' : 'CLIENT';
+
   return {
     id: userId,
     company_id: 'comp_ozi_01',
@@ -601,7 +646,7 @@ export async function verifyUserSubscriptionInSupabase(userId: string, email?: s
     email: email || '',
     phone: '(11) 98765-4321',
     whatsapp: '(11) 98765-4321',
-    role: 'ADMINISTRADOR',
+    role: effectiveRole,
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
     active: true,
     created_at: trialDates.trial_start,

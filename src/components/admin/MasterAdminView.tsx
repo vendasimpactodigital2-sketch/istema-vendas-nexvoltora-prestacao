@@ -45,6 +45,20 @@ export const MasterAdminView: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  // EXCLUSIVIDADE ABSOLUTA DO MASTER
+  const isMaster = currentUser?.email?.toLowerCase().trim() === 'vendas.impactodigital2@gmail.com';
+  if (!isMaster) {
+    return (
+      <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 my-8">
+        <ShieldCheck className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-slate-800 dark:text-white">Acesso Exclusivo do Usuário Master</h2>
+        <p className="text-xs text-slate-500 mt-2 max-w-sm mx-auto">
+          Esta área é de acesso restrito e confidencial, exclusiva para a conta master do sistema.
+        </p>
+      </div>
+    );
+  }
+
   // WhatsApp Message Customization Modal
   const [whatsappModalUser, setWhatsappModalUser] = useState<{ user: User; message: string; phone: string } | null>(null);
 

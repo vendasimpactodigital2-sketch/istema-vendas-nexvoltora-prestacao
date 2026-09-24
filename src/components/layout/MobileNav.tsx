@@ -18,13 +18,8 @@ export const MobileNav: React.FC = () => {
   const { activeTab, setActiveTab, openQuickAction, currentUser, expiringClientsCount } = useApp();
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
   const userEmail = (currentUser?.email || '').toLowerCase().trim();
-  const isMasterUser =
-    userRole === 'master' ||
-    userRole === 'admin' ||
-    userRole === 'administrador' ||
-    userEmail === 'vendas.impactodigital2@gmail.com';
+  const isMaster = userEmail === 'vendas.impactodigital2@gmail.com';
 
   const navItems = [
     { id: 'dashboard' as ActiveTab, label: 'Início', icon: LayoutDashboard },
@@ -158,7 +153,7 @@ export const MobileNav: React.FC = () => {
                 </div>
               </button>
 
-              {isMasterUser && (
+              {isMaster && (
                 <button
                   onClick={() => {
                     setSheetOpen(false);

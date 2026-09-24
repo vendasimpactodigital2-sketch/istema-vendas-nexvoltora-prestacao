@@ -307,21 +307,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (cached) {
       try {
         const parsed: User = JSON.parse(cached);
-        const rawStatus = (parsed.subscription_status || parsed.subscriptionStatus || 'trial').toLowerCase();
-        // Se for trial e estiver sem data ou com período expirado, atualiza imediatamente para valer 15 dias a partir de hoje
-        if (rawStatus === 'trial' || !parsed.subscriptionStatus) {
-          const rawEnd = parsed.trial_end || parsed.trial_ends_at || parsed.trialEndsAt;
-          if (!rawEnd || !isTrialActive(rawEnd)) {
-            const trialDates = calculateTrialEndDates(15);
-            parsed.subscription_status = 'trial';
-            parsed.subscriptionStatus = 'trial';
-            parsed.trial_start = trialDates.trial_start;
-            parsed.trial_end = trialDates.trial_end;
-            parsed.trial_ends_at = trialDates.trial_ends_at;
-            parsed.trialEndsAt = trialDates.trialEndsAt;
-            localStorage.setItem('ozi_current_user', JSON.stringify(parsed));
-          }
+        const email = (parsed.email || '').toLowerCase().trim();
+        const isMaster = email === 'vendas.impactodigital2@gmail.com';
+
+        if (isMaster) {
+          parsed.role = 'MASTER';
+          parsed.subscriptionStatus = 'active';
+          parsed.subscription_status = 'active';
+          return parsed;
         }
+
+        // Rebaixar qualquer outro utilizador para CLIENT
+        parsed.role = 'CLIENT';
+
+        const rawStatus = (parsed.subscription_status || parsed.subscriptionStatus || '').toLowerCase();
+        const rawEnd = parsed.trial_end || parsed.trial_ends_at || parsed.trialEndsAt;
+
+        // Se estiver marcado como bloqueado, expirado ou se trial_end já passou: manter como expired
+        if (
+          rawStatus === 'expired' ||
+          rawStatus === 'bloqueado' ||
+          (parsed as any).is_blocked === true ||
+          (parsed as any).isBlocked === true ||
+          (rawEnd && !isTrialActive(rawEnd))
+        ) {
+          parsed.subscription_status = 'expired';
+          parsed.subscriptionStatus = 'expired';
+          (parsed as any).is_blocked = true;
+          localStorage.setItem('ozi_current_user', JSON.stringify(parsed));
+          return parsed;
+        }
+
         return parsed;
       } catch (e) {}
     }

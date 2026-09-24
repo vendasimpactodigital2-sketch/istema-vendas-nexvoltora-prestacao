@@ -3,6 +3,8 @@ export type UserRole =
   | 'GERENTE'
   | 'ORÇAMENTISTA'
   | 'FUNCIONÁRIO'
+  | 'CLIENT'
+  | 'client'
   | 'master'
   | 'admin'
   | 'MASTER'

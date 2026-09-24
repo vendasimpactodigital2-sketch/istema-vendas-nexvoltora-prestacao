@@ -22,7 +22,15 @@ import { getSupabase, parseTrialDate, isTrialActive } from './lib/supabaseClient
 import { User } from './types';
 
 const MainLayout: React.FC = () => {
-  const { currentTab, isAuthenticated, isSubscriptionBlocked, sidebarCollapsed, currentUser, setCurrentUser } = useApp();
+  const {
+    currentTab,
+    isAuthenticated,
+    isSubscriptionBlocked,
+    sidebarCollapsed,
+    currentUser,
+    setCurrentUser,
+    subscriptionInfo,
+  } = useApp();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isVerifyingSupabase, setIsVerifyingSupabase] = useState(false);
   const [supabaseBlocked, setSupabaseBlocked] = useState(false);
@@ -42,7 +50,21 @@ const MainLayout: React.FC = () => {
       setIsVerifyingSupabase(true);
       try {
         const loggedId = currentUser.id;
-        const loggedEmail = currentUser.email;
+        const loggedEmail = (currentUser.email || '').toLowerCase().trim();
+        const userIsMaster = loggedEmail === 'vendas.impactodigital2@gmail.com';
+
+        // 1. O Master (vendas.impactodigital2@gmail.com) NUNCA é bloqueado
+        if (userIsMaster) {
+          if (isMounted) {
+            setSupabaseBlocked(false);
+            if (currentUser.role !== 'MASTER') {
+              const masterUser = { ...currentUser, role: 'MASTER' as const, subscriptionStatus: 'active' as const };
+              setCurrentUser(masterUser);
+              localStorage.setItem('ozi_current_user', JSON.stringify(masterUser));
+            }
+          }
+          return;
+        }
 
         let dbUser: any = null;
         if (supabase) {
@@ -61,12 +83,13 @@ const MainLayout: React.FC = () => {
           }
         }
 
+        // 2. Para qualquer outro utilizador: NUNCA usar role para dar isenção!
         const rawStatus = (
           dbUser?.subscription_status ||
           dbUser?.subscriptionStatus ||
           currentUser.subscription_status ||
           currentUser.subscriptionStatus ||
-          'trial'
+          ''
         ).toString().trim().toLowerCase();
 
         const rawTrialEnd =
@@ -78,16 +101,12 @@ const MainLayout: React.FC = () => {
           currentUser.trialEndsAt;
 
         let shouldBlock = false;
-        if (rawStatus === 'active' || rawStatus === 'ativo') {
+
+        // Se estiver marcado como bloqueado no banco
+        if (dbUser?.is_blocked === true || dbUser?.isBlocked === true || (currentUser as any)?.is_blocked === true) {
+          shouldBlock = true;
+        } else if (rawStatus === 'active' || rawStatus === 'ativo') {
           shouldBlock = false;
-        } else if (rawStatus === 'trial' || rawStatus === 'teste') {
-          // Enquanto a data atual for anterior a trial_end, o utilizador DEVE ter acesso normal e total
-          if (!rawTrialEnd) {
-            shouldBlock = false;
-          } else {
-            const isTrialValid = isTrialActive(rawTrialEnd);
-            shouldBlock = !isTrialValid;
-          }
         } else if (
           rawStatus === 'expired' ||
           rawStatus === 'vencido' ||
@@ -98,7 +117,27 @@ const MainLayout: React.FC = () => {
         ) {
           shouldBlock = true;
         } else {
-          shouldBlock = true;
+          // Em período de teste: se não tiver data, ou data for passada, ou dias restantes for <= 0 -> BLOQUEIA
+          if (!rawTrialEnd) {
+            shouldBlock = true;
+          } else {
+            const isTrialValid = isTrialActive(rawTrialEnd);
+            if (!isTrialValid) {
+              shouldBlock = true;
+            } else {
+              try {
+                const now = new Date();
+                const endDate = rawTrialEnd.includes('T') ? new Date(rawTrialEnd) : new Date(`${rawTrialEnd}T23:59:59.999Z`);
+                const diffMs = endDate.getTime() - now.getTime();
+                const days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+                if (days <= 0) {
+                  shouldBlock = true;
+                }
+              } catch (e) {
+                shouldBlock = true;
+              }
+            }
+          }
         }
 
         // Checagem em tempo real com o webhook do Asaas se estiver bloqueado
@@ -130,8 +169,10 @@ const MainLayout: React.FC = () => {
           const effectiveTrialEnd = rawTrialEnd || new Date(Date.now() + 15 * 86400000).toISOString();
           const effectiveTrialEndDate = effectiveTrialEnd.split('T')[0];
 
+          // Rebaixar qualquer utilizador comum para 'CLIENT'
           const updatedUser: User = {
             ...currentUser,
+            role: 'CLIENT',
             subscriptionStatus: finalStatus,
             subscription_status: finalStatus,
             trialEndsAt: effectiveTrialEndDate,
@@ -142,7 +183,8 @@ const MainLayout: React.FC = () => {
 
           if (
             currentUser.subscriptionStatus !== finalStatus ||
-            currentUser.trial_end !== effectiveTrialEnd
+            currentUser.trial_end !== effectiveTrialEnd ||
+            currentUser.role !== 'CLIENT'
           ) {
             setCurrentUser(updatedUser);
             localStorage.setItem('ozi_current_user', JSON.stringify(updatedUser));
@@ -182,18 +224,46 @@ const MainLayout: React.FC = () => {
     );
   }
 
-  // Bloqueio Total: apenas para clientes que não forem master/admin quando expirar ou estiver bloqueado
-  const userRole = (currentUser?.role || '').toString().toLowerCase().trim();
-  const userEmail = (currentUser?.email || '').toLowerCase().trim();
-  const isMasterOrAdmin =
-    userRole === 'master' ||
-    userRole === 'admin' ||
-    userRole === 'administrador' ||
-    userEmail === 'vendas.impactodigital2@gmail.com';
+  // 1. EXCLUSIVIDADE ABSOLUTA DO MASTER:
+  // Apenas e estritamente o e-mail 'vendas.impactodigital2@gmail.com' tem acesso irrestrito
+  const isMaster = currentUser.email?.toLowerCase().trim() === 'vendas.impactodigital2@gmail.com';
+
+  // 2. BLOQUEIO OBRIGATÓRIO (SUBSCRIPTION / TRIAL):
+  // Se o e-mail NÃO for 'vendas.impactodigital2@gmail.com':
+  // Se trial_end estiver vencido (ou Teste: 0d), is_blocked === true, ou subscription_status === 'expired', bloqueie IMEDIATAMENTE.
+  const isTrialFinished = () => {
+    if (isMaster) return false;
+    const endVal = currentUser.trial_end || currentUser.trial_ends_at || currentUser.trialEndsAt;
+    if (!endVal) return true;
+    if (!isTrialActive(endVal)) return true;
+    try {
+      const now = new Date();
+      const endDate = endVal.includes('T') ? new Date(endVal) : new Date(`${endVal}T23:59:59.999Z`);
+      const diffMs = endDate.getTime() - now.getTime();
+      const days = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      if (days <= 0) return true;
+    } catch (e) {
+      return true;
+    }
+    return false;
+  };
 
   const shouldBlockAccess =
-    !isMasterOrAdmin &&
-    (supabaseBlocked || isSubscriptionBlocked || currentUser?.subscriptionStatus === 'expired');
+    !isMaster &&
+    (supabaseBlocked ||
+      isSubscriptionBlocked ||
+      subscriptionInfo.isBlocked ||
+      subscriptionInfo.isExpired ||
+      (subscriptionInfo.daysRemaining !== undefined &&
+        subscriptionInfo.daysRemaining <= 0 &&
+        subscriptionInfo.status !== 'active') ||
+      currentUser.subscriptionStatus === 'expired' ||
+      (currentUser as any).subscription_status === 'expired' ||
+      (currentUser as any).is_blocked === true ||
+      (currentUser as any).isBlocked === true ||
+      (currentUser.subscriptionStatus !== 'active' &&
+        (currentUser as any).subscription_status !== 'active' &&
+        isTrialFinished()));
 
   if (shouldBlockAccess) {
     return (
@@ -224,10 +294,14 @@ const MainLayout: React.FC = () => {
         return <TeamView />;
       case 'reports':
         return <ReportsView />;
+      case 'master-admin':
+        // Apenas e estritamente 'vendas.impactodigital2@gmail.com' pode renderizar o MasterAdminView
+        if (!isMaster) {
+          return <DashboardView />;
+        }
+        return <MasterAdminView />;
       case 'settings':
         return <SettingsView />;
-      case 'master-admin':
-        return <MasterAdminView />;
       default:
         return <DashboardView />;
     }
