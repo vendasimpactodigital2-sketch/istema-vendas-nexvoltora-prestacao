@@ -268,23 +268,26 @@ export const ClientsView: React.FC = () => {
               <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
                 <WhatsAppButton
                   phone={client.whatsapp || client.phone}
-                  message={`Olá, ${client.name}! Como posso te ajudar hoje com serviços e reformas da OZI?`}
+                  message={`Olá, ${client.name}! Como posso te ajudar hoje com serviços e obras da Nexvoltora?`}
                   size="sm"
                   label="WhatsApp"
                 />
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 relative z-20 pointer-events-auto">
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const fullAddr = `${client.address}, ${client.number}${client.complement ? ` (${client.complement})` : ''} - ${client.neighborhood}, ${client.city} - ${client.state}`;
                       openQuickAction('newQuote', {
                         clientId: client.id,
                         clientName: client.name,
                         phone: client.whatsapp || client.phone,
-                        address: `${client.address}, ${client.number} - ${client.city}`,
-                      })
-                    }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        address: fullAddr,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
                     title="Criar Orçamento para este cliente"
                   >
                     <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -293,15 +296,18 @@ export const ClientsView: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const fullAddr = `${client.address}, ${client.number}${client.complement ? ` (${client.complement})` : ''} - ${client.neighborhood}, ${client.city} - ${client.state}`;
                       openQuickAction('newAppointment', {
                         clientId: client.id,
                         clientName: client.name,
                         phone: client.whatsapp || client.phone,
-                        address: `${client.address}, ${client.number} - ${client.neighborhood}, ${client.city}`,
-                      })
-                    }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        address: fullAddr,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
                     title="Agendar visita para este cliente"
                   >
                     <Calendar className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />

@@ -111,9 +111,14 @@ export const DashboardView: React.FC = () => {
       <div className="relative overflow-hidden rounded-3xl bg-linear-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 sm:p-8 shadow-xl border border-slate-800">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Painel Executivo • {company.trade_name}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Painel Executivo • {company.trade_name}</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold uppercase tracking-wider">
+                <span>Função: {currentUser?.role || 'ADMINISTRADOR'}</span>
+              </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
               {greeting}, {currentUser?.name?.split(' ')[0] || 'Gestor'} 👋

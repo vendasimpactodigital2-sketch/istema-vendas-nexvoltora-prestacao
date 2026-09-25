@@ -18,7 +18,7 @@ import {
 import { formatPhone, generateId } from '../../lib/utils';
 
 export const TeamView: React.FC = () => {
-  const { users, currentUser, setCurrentUser, company, addUser, updateUser } = useApp();
+  const { users, currentUser, setCurrentUser, company, addUser, updateUser, addToast } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -147,9 +147,12 @@ export const TeamView: React.FC = () => {
             value={currentUser?.id}
             onChange={(e) => {
               const u = users.find((user) => user.id === e.target.value);
-              if (u) setCurrentUser(u);
+              if (u) {
+                setCurrentUser(u);
+                addToast(`Perfil ativo alterado para ${u.name} (${u.role})!`, 'success');
+              }
             }}
-            className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-white"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-bold text-white cursor-pointer"
           >
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -213,11 +216,17 @@ export const TeamView: React.FC = () => {
 
               <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <button
-                  onClick={() => setCurrentUser(user)}
+                  type="button"
+                  onClick={() => {
+                    if (!isMe) {
+                      setCurrentUser(user);
+                      addToast(`Perfil ativo alterado para ${user.name} (${user.role})!`, 'success');
+                    }
+                  }}
                   className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${
                     isMe
                       ? 'text-slate-400 cursor-default'
-                      : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                      : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 cursor-pointer active:scale-95'
                   }`}
                 >
                   {isMe ? 'Ativo no momento' : 'Usar este perfil'}

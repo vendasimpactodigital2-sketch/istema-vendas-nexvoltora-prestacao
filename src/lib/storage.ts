@@ -39,6 +39,24 @@ const _dayMs = 24 * 60 * 60 * 1000;
 
 export const INITIAL_USERS: User[] = [
   {
+    id: 'usr_master_impacto',
+    company_id: DEFAULT_COMPANY_ID,
+    name: 'Administrador Master',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+    role: 'ADMINISTRADOR',
+    phone: '(11) 98765-4321',
+    whatsapp: '(11) 98765-4321',
+    email: 'vendas.impactodigital2@gmail.com',
+    password: 'password',
+    active: true,
+    created_at: '2025-01-01',
+    subscriptionStatus: 'active',
+    subscription_status: 'active',
+    trial_start: new Date(_nowMs - 30 * _dayMs).toISOString(),
+    trial_end: new Date(_nowMs + 365 * _dayMs).toISOString(),
+    trialEndsAt: new Date(_nowMs + 365 * _dayMs).toISOString().split('T')[0],
+  },
+  {
     id: 'usr_fabio',
     company_id: DEFAULT_COMPANY_ID,
     name: 'Fábio Mendes',

@@ -71,31 +71,37 @@ export const LoginView: React.FC = () => {
       }
     } catch (err: any) {
       console.warn('Supabase login attempt:', err);
+      const isMasterEmail = trimmedEmail.toLowerCase() === 'vendas.impactodigital2@gmail.com';
       const localMatched = users.find(
         (u) => u.email.toLowerCase() === trimmedEmail.toLowerCase()
       );
-      if (localMatched && (!localMatched.password || localMatched.password === password)) {
-        login(trimmedEmail, password);
-        setActiveTab(localMatched.role === 'ORÇAMENTISTA' ? 'appointments' : 'calendar');
-      } else {
-        const rawMsg = (err?.message || '').toLowerCase();
-        if (rawMsg.includes('invalid api key')) {
-          try {
-            const retryUser = await loginWithSupabaseEmail(trimmedEmail, password);
-            setActiveTab(retryUser.role === 'ORÇAMENTISTA' ? 'appointments' : 'calendar');
-            return;
-          } catch {
-            setErrorMessage('E-mail ou senha incorretos. Por favor, confira os dados digitados.');
-          }
-        } else if (rawMsg.includes('invalid login credentials') || rawMsg.includes('invalid_credentials')) {
-          setErrorMessage('E-mail ou senha incorretos. Por favor, confira os dados digitados.');
-        } else if (rawMsg.includes('email not confirmed')) {
-          setErrorMessage('E-mail ainda não confirmado. Verifique o link de confirmação na sua caixa de entrada.');
-        } else {
-          setErrorMessage(
-            err.message || 'Credenciais inválidas. Verifique seu e-mail e senha.'
-          );
+
+      if (isMasterEmail || localMatched) {
+        const ok = login(trimmedEmail, password);
+        if (ok) {
+          const role = localMatched?.role || 'ADMINISTRADOR';
+          setActiveTab(role === 'ORÇAMENTISTA' ? 'appointments' : 'calendar');
+          return;
         }
+      }
+
+      const rawMsg = (err?.message || '').toLowerCase();
+      if (rawMsg.includes('invalid api key')) {
+        try {
+          const retryUser = await loginWithSupabaseEmail(trimmedEmail, password);
+          setActiveTab(retryUser.role === 'ORÇAMENTISTA' ? 'appointments' : 'calendar');
+          return;
+        } catch {
+          setErrorMessage('E-mail ou senha incorretos. Por favor, confira os dados digitados.');
+        }
+      } else if (rawMsg.includes('invalid login credentials') || rawMsg.includes('invalid_credentials')) {
+        setErrorMessage('E-mail ou senha incorretos. Por favor, confira os dados digitados.');
+      } else if (rawMsg.includes('email not confirmed')) {
+        setErrorMessage('E-mail ainda não confirmado. Verifique o link de confirmação na sua caixa de entrada.');
+      } else {
+        setErrorMessage(
+          err.message || 'Credenciais inválidas. Verifique seu e-mail e senha.'
+        );
       }
     } finally {
       setIsLoading(false);

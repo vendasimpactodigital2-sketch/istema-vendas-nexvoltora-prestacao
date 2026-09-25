@@ -43,6 +43,7 @@ export const FinancialView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; isEntry: boolean; description: string; amount: number } | null>(null);
 
   // New Entry Form State
@@ -321,7 +322,9 @@ export const FinancialView: React.FC = () => {
                   return (
                     <tr
                       key={item.id}
-                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                      onClick={() => setSelectedTransaction(item)}
+                      className="hover:bg-blue-50/60 dark:hover:bg-slate-800/70 transition-colors cursor-pointer group"
+                      title="Clique para ver os detalhes deste lançamento"
                     >
                       <td className="py-3 px-4 text-center">
                         {isEntry ? (
@@ -377,12 +380,15 @@ export const FinancialView: React.FC = () => {
                       <td className="py-3 px-4 text-center">
                         <button
                           type="button"
-                          onClick={() => setItemToDelete({
-                            id: item.id,
-                            isEntry,
-                            description: item.description,
-                            amount: item.amount,
-                          })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setItemToDelete({
+                              id: item.id,
+                              isEntry,
+                              description: item.description,
+                              amount: item.amount,
+                            });
+                          }}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
                           title="Excluir lançamento"
                         >
@@ -702,6 +708,204 @@ export const FinancialView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal / Drawer de Detalhes do Lançamento Financeiro */}
+      {selectedTransaction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setSelectedTransaction(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-150 text-left text-slate-900 dark:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                    selectedTransaction.type === 'entry'
+                      ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-500'
+                      : 'bg-rose-500/15 border border-rose-500/30 text-rose-500'
+                  }`}
+                >
+                  {selectedTransaction.type === 'entry' ? (
+                    <ArrowUpRight className="w-6 h-6" />
+                  ) : (
+                    <ArrowDownRight className="w-6 h-6" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                        selectedTransaction.type === 'entry'
+                          ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'
+                          : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800'
+                      }`}
+                    >
+                      {selectedTransaction.type === 'entry' ? 'Receita / Entrada' : 'Despesa / Saída'}
+                    </span>
+                    <Badge status={selectedTransaction.status} size="sm" />
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-1">
+                    Detalhes do Lançamento
+                  </h3>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTransaction(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Valor com destaque */}
+            <div
+              className={`p-4 rounded-2xl border text-center ${
+                selectedTransaction.type === 'entry'
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-400'
+              }`}
+            >
+              <span className="text-xs uppercase font-bold tracking-wider block opacity-75">
+                Valor Total do Lançamento
+              </span>
+              <p className="text-3xl font-black font-mono tracking-tight mt-0.5">
+                {selectedTransaction.type === 'entry' ? '+' : '-'} {formatCurrency(selectedTransaction.amount)}
+              </p>
+            </div>
+
+            {/* Informações Estruturadas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-slate-400 block mb-0.5">Descrição</span>
+                <p className="font-bold text-slate-800 dark:text-slate-200">
+                  {selectedTransaction.description}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-slate-400 block mb-0.5">Data do Registro</span>
+                <p className="font-bold text-slate-800 dark:text-slate-200">
+                  {formatDate(selectedTransaction.date)}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-slate-400 block mb-0.5">Forma de Pagamento</span>
+                <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span>{selectedTransaction.payment_method || 'PIX'}</span>
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                <span className="text-slate-400 block mb-0.5">Obra / Projeto</span>
+                <p className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <HardHat className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>
+                    {projects.find((p) => p.id === selectedTransaction.project_id)?.name || 'Despesa Geral da Empresa'}
+                  </span>
+                </p>
+              </div>
+
+              {'client_name' in selectedTransaction && selectedTransaction.client_name && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-slate-400 block mb-0.5">Cliente Vinculado</span>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">
+                    {selectedTransaction.client_name}
+                  </p>
+                </div>
+              )}
+
+              {'category' in selectedTransaction && selectedTransaction.category && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-slate-400 block mb-0.5">Categoria da Despesa</span>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">
+                    {selectedTransaction.category}
+                  </p>
+                </div>
+              )}
+
+              {'notes' in selectedTransaction && selectedTransaction.notes && (
+                <div className="col-span-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60">
+                  <span className="text-slate-400 block mb-0.5">Observações</span>
+                  <p className="text-slate-700 dark:text-slate-300 italic">
+                    {selectedTransaction.notes}
+                  </p>
+                </div>
+              )}
+
+              <div className="col-span-full p-2.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/30 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>ID do Lançamento:</span>
+                <span className="font-mono">{selectedTransaction.id}</span>
+              </div>
+            </div>
+
+            {/* Ações no Rodapé */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {/* Botão Alternar Status */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newStatus: PaymentStatus =
+                      selectedTransaction.status === 'Pendente'
+                        ? selectedTransaction.type === 'entry' ? 'Recebido' : 'Pago'
+                        : 'Pendente';
+
+                    if (selectedTransaction.type === 'entry') {
+                      updateFinancialEntry(selectedTransaction.id, { status: newStatus });
+                    } else {
+                      updateFinancialExpense(selectedTransaction.id, { status: newStatus });
+                    }
+                    setSelectedTransaction((prev: any) => (prev ? { ...prev, status: newStatus } : null));
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5"
+                >
+                  <FileCheck className="w-3.5 h-3.5" />
+                  <span>
+                    {selectedTransaction.status === 'Pendente'
+                      ? selectedTransaction.type === 'entry' ? 'Marcar como Recebido' : 'Marcar como Pago'
+                      : 'Marcar como Pendente'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const toDel = selectedTransaction;
+                    setSelectedTransaction(null);
+                    setItemToDelete({
+                      id: toDel.id,
+                      isEntry: toDel.type === 'entry',
+                      description: toDel.description,
+                      amount: toDel.amount,
+                    });
+                  }}
+                  className="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Excluir</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTransaction(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Confirmação para Excluir Lançamento */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in">

@@ -27,6 +27,7 @@ import {
   INITIAL_FINANCIAL_EXPENSES,
   INITIAL_NOTIFICATIONS,
   DEFAULT_MONTHLY_GOAL,
+  DEFAULT_COMPANY_ID,
   loadFromStorage,
   saveToStorage,
   resetAllToDemoData,
@@ -317,16 +318,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Users / Team
-  const [users, setUsers] = useState<User[]>(() =>
-    loadFromStorage('users', INITIAL_USERS)
-  );
+  // Users / Team
+  const [users, setUsers] = useState<User[]>(() => {
+    const loaded = loadFromStorage('users', INITIAL_USERS);
+    const hasMaster = loaded.some(
+      (u: User) => (u.email || '').toLowerCase().trim() === 'vendas.impactodigital2@gmail.com'
+    );
+    if (!hasMaster) {
+      const masterUser: User = {
+        id: 'usr_master_impacto',
+        company_id: DEFAULT_COMPANY_ID,
+        name: 'Administrador Master',
+        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        role: 'ADMINISTRADOR',
+        phone: '(11) 98765-4321',
+        whatsapp: '(11) 98765-4321',
+        email: 'vendas.impactodigital2@gmail.com',
+        password: 'password',
+        active: true,
+        created_at: '2025-01-01',
+        subscriptionStatus: 'active',
+        subscription_status: 'active',
+      };
+      const merged = [masterUser, ...loaded];
+      saveToStorage('users', merged);
+      return merged;
+    }
+    return loaded;
+  });
 
   // Supabase Authentication & Session State
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [supabaseConnected, setSupabaseConnected] = useState<boolean>(() => isSupabaseConnected());
 
   // Current session user
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => {
     const cached = localStorage.getItem('ozi_current_user');
     if (cached) {
       try {
@@ -335,14 +361,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const isMaster = email === 'vendas.impactodigital2@gmail.com';
 
         if (isMaster) {
-          parsed.role = 'MASTER';
+          parsed.role = 'ADMINISTRADOR';
           parsed.subscriptionStatus = 'active';
           parsed.subscription_status = 'active';
           return parsed;
         }
 
-        // Rebaixar qualquer outro utilizador para CLIENT
-        parsed.role = 'CLIENT';
+        // Mantém a função original e não rebaixa para CLIENT
+        if (!parsed.role || (parsed.role as any) === 'CLIENT' || (parsed.role as any) === 'MASTER') {
+          parsed.role = 'ADMINISTRADOR';
+        }
 
         const rawStatus = (parsed.subscription_status || parsed.subscriptionStatus || '').toLowerCase();
         const rawEnd = parsed.trial_end || parsed.trial_ends_at || parsed.trialEndsAt;
@@ -367,6 +395,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+
+  const setCurrentUser = (user: User | null) => {
+    setCurrentUserState(user);
+    if (user) {
+      localStorage.setItem('ozi_current_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('ozi_current_user');
+    }
+  };
 
   // Listen to Supabase Auth state & Session
   useEffect(() => {
@@ -592,6 +629,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast(`Bem-vindo(a), ${userObj.name}!`, 'success');
       return true;
     }
+
+    if (!found && trimmed === 'vendas.impactodigital2@gmail.com') {
+      const masterUser: User = {
+        id: 'usr_master_impacto',
+        company_id: company.id || DEFAULT_COMPANY_ID,
+        name: 'Administrador Master',
+        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
+        role: 'ADMINISTRADOR',
+        phone: '(11) 98765-4321',
+        whatsapp: '(11) 98765-4321',
+        email: 'vendas.impactodigital2@gmail.com',
+        active: true,
+        created_at: '2025-01-01',
+        subscriptionStatus: 'active',
+        subscription_status: 'active',
+      };
+      setUsers((prev) => [masterUser, ...prev.filter((u) => u.email.toLowerCase() !== trimmed)]);
+      setCurrentUser(masterUser);
+      addToast('Bem-vindo(a), Administrador Master!', 'success');
+      return true;
+    }
+
     addToast('Usuário não encontrado com este e-mail.', 'error');
     return false;
   };
@@ -1482,10 +1541,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [pendingQuotePrefill, setPendingQuotePrefill] = useState<any>(null);
 
   const openQuickAction = (action: string, prefill?: any) => {
-    if (action === 'appointment' && prefill) {
-      setPendingAppointmentPrefill(prefill);
-    } else if (action === 'quote' && prefill) {
-      setPendingQuotePrefill(prefill);
+    if (action === 'appointment' || action === 'newAppointment') {
+      if (prefill) {
+        setPendingAppointmentPrefill(prefill);
+      }
+      setActiveTab('appointments');
+    } else if (action === 'quote' || action === 'newQuote') {
+      if (prefill) {
+        setPendingQuotePrefill(prefill);
+      }
+      setActiveTab('quotes');
+    } else if (action === 'newClient') {
+      setActiveTab('clients');
+    } else if (action === 'newProject') {
+      setActiveTab('projects');
+    } else if (action === 'newEntry' || action === 'newExpense') {
+      setActiveTab('financial');
     }
     setQuickActionModal(action);
   };
