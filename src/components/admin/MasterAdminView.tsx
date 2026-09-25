@@ -195,7 +195,7 @@ export const MasterAdminView: React.FC = () => {
       urgencyText = `expira em ${metrics.daysRemaining} dias`;
     }
 
-    const defaultMsg = `Olá, ${clientFirstName}! Sou da equipe de suporte do Nexvoltora Gestão. Notamos que o seu período de teste do sistema ${urgencyText}. Gostaria de renovar seu acesso ou ativar a assinatura mensal ilimitada por apenas R$ 26,99/mês? Conte conosco para qualquer dúvida!`;
+    const defaultMsg = `Olá, ${clientFirstName}! Sou da equipe de suporte do Nexvoltora Gestão. Notamos que o seu período de teste do sistema ${urgencyText}. Gostaria de renovar seu acesso ou ativar a assinatura mensal ilimitada por apenas R$ 36,99/mês? Conte conosco para qualquer dúvida!`;
 
     setWhatsappModalUser({
       user,
@@ -373,7 +373,7 @@ export const MasterAdminView: React.FC = () => {
               <CheckCircle2 className="w-4 h-4" />
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-              R$ 26,99/mês
+              R$ 36,99/mês
             </span>
           </div>
           <p className="text-xs font-medium text-slate-500">Assinaturas Ativas</p>

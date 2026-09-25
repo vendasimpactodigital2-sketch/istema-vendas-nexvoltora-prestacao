@@ -667,7 +667,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Sessão encerrada com sucesso.', 'info');
   };
 
-  // Ativar Assinatura Mensal (R$ 26,99/mês) e atualizar Supabase
+  // Ativar Assinatura Mensal (R$ 36,99/mês) e atualizar Supabase
   const activateSubscription = async (): Promise<void> => {
     if (!currentUser) return;
     try {
@@ -686,7 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveToStorage('users', next);
         return next;
       });
-      addToast('Assinatura Mensal de R$ 26,99/mês ativada com sucesso! Acesso liberado.', 'success');
+      addToast('Assinatura Mensal de R$ 36,99/mês ativada com sucesso! Acesso liberado.', 'success');
     } catch (err) {
       console.warn('Erro ao atualizar assinatura no Supabase, aplicando no estado local:', err);
       const fallbackUser: User = {

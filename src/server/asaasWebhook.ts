@@ -355,7 +355,7 @@ function computePixCrc16(payloadWithoutCrc: string): string {
 }
 
 /**
- * Cria cobrança PIX do Asaas (R$ 26,99) e gera o código Pix Copia e Cola
+ * Cria cobrança PIX do Asaas (R$ 36,99) e gera o código Pix Copia e Cola
  * Rota: POST /api/asaas/create-pix
  */
 export async function handleCreatePixEndpoint(req: Request, res: Response) {
@@ -368,7 +368,7 @@ export async function handleCreatePixEndpoint(req: Request, res: Response) {
     const rawMerchantUrl = `pix.asaas.com/qr/stat/${paymentId}`;
     const merchantAccountInfo = `0014br.gov.bcb.pix25${String(rawMerchantUrl.length).padStart(2, '0')}${rawMerchantUrl}`;
 
-    const valueStr = '26.99';
+    const valueStr = '36.99';
     const merchantName = 'NEXVOLTORA GESTAO';
     const merchantCity = 'SAO PAULO';
 
@@ -391,9 +391,9 @@ export async function handleCreatePixEndpoint(req: Request, res: Response) {
     return res.status(200).json({
       success: true,
       paymentId,
-      value: 26.99,
+      value: 36.99,
       pixCopiaECola,
-      description: 'Assinatura Mensal Nexvoltora Gestão (R$ 26,99/mês)',
+      description: 'Assinatura Mensal Nexvoltora Gestão (R$ 36,99/mês)',
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     });
   } catch (err: any) {

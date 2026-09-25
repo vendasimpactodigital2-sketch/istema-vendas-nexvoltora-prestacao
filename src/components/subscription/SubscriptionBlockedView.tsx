@@ -2,25 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { subscribeToUserSubscription } from '../../lib/supabaseClient';
 import confetti from 'canvas-confetti';
-import QRCode from 'qrcode';
 import {
   Lock,
   Sparkles,
   CheckCircle2,
   ShieldCheck,
-  Building,
   LogOut,
-  Zap,
   ArrowRight,
   Clock,
   RefreshCw,
   QrCode as QrIcon,
-  Copy,
-  Check,
   ExternalLink,
-  CreditCard,
-  X,
-  AlertCircle,
 } from 'lucide-react';
 
 export const SubscriptionBlockedView: React.FC = () => {
@@ -35,22 +27,20 @@ export const SubscriptionBlockedView: React.FC = () => {
     addToast,
   } = useApp();
 
-  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
-  const [showPixModal, setShowPixModal] = useState(false);
-  const [pixData, setPixData] = useState<{
-    paymentId: string;
-    pixCopiaECola: string;
-    qrCodeUrl: string;
-    value: number;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
   const [isUnlockedSuccess, setIsUnlockedSuccess] = useState(false);
   const [isRenewingTrial, setIsRenewingTrial] = useState(false);
 
   const isMaster = currentUser?.email?.toLowerCase().trim() === 'vendas.impactodigital2@gmail.com';
 
   const ASAAS_CHECKOUT_URL = 'https://www.asaas.com/c/a7wa52vfwn1sq35p';
+
+  // Redirecionamento direto para o checkout oficial do Asaas
+  const handleDirectCheckout = () => {
+    const win = window.open(ASAAS_CHECKOUT_URL, '_blank');
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      window.location.href = ASAAS_CHECKOUT_URL;
+    }
+  };
 
   // 3. Configura a escuta no Supabase (Realtime Channel + Polling de Contingência)
   useEffect(() => {
@@ -89,101 +79,6 @@ export const SubscriptionBlockedView: React.FC = () => {
     };
   }, [currentUser?.id, currentUser?.email]);
 
-  // Função para gerar o Pix do Asaas com QR Code e Pix Copia e Cola
-  const handleGeneratePix = async () => {
-    setIsGeneratingPix(true);
-    setShowPixModal(true);
-
-    try {
-      const res = await fetch('/api/asaas/create-pix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser?.email,
-          name: currentUser?.name,
-          uid: currentUser?.id,
-          value: 26.99,
-        }),
-      });
-
-      let copiaECola = '';
-      let paymentId = `pay_${Date.now()}`;
-
-      if (res.ok) {
-        const data = await res.json();
-        copiaECola = data.pixCopiaECola;
-        paymentId = data.paymentId || paymentId;
-      } else {
-        // Fallback seguro de geração cliente
-        copiaECola = `00020101021226830014br.gov.bcb.pix2561pix.asaas.com/qr/stat/${paymentId}520400005303986540526.995802BR5925NEXVOLTORA GESTAO E REFO6009SAO PAULO62070503***6304ABCD`;
-      }
-
-      // Gera a imagem do QR Code em alta definição
-      const qrCodeUrl = await QRCode.toDataURL(copiaECola, {
-        width: 320,
-        margin: 2,
-        color: {
-          dark: '#020617',
-          light: '#ffffff',
-        },
-      });
-
-      setPixData({
-        paymentId,
-        pixCopiaECola: copiaECola,
-        qrCodeUrl,
-        value: 26.99,
-      });
-    } catch (err) {
-      console.warn('Erro ao gerar Pix via API, usando gerador local:', err);
-      const fallbackCode = `00020101021226830014br.gov.bcb.pix2561pix.asaas.com/qr/stat/pay_${Date.now()}520400005303986540526.995802BR5925NEXVOLTORA GESTAO6009SAO PAULO62070503***6304E8A1`;
-      const qr = await QRCode.toDataURL(fallbackCode, { width: 320, margin: 2 });
-      setPixData({
-        paymentId: `pay_${Date.now()}`,
-        pixCopiaECola: fallbackCode,
-        qrCodeUrl: qr,
-        value: 26.99,
-      });
-    } finally {
-      setIsGeneratingPix(false);
-    }
-  };
-
-  const handleCopyPix = () => {
-    if (!pixData?.pixCopiaECola) return;
-    navigator.clipboard.writeText(pixData.pixCopiaECola);
-    setCopied(true);
-    addToast('Código Pix copiado com sucesso! Abra o app do seu banco e cole.', 'info');
-    setTimeout(() => setCopied(false), 3500);
-  };
-
-  // Simular confirmação imediata do Webhook do Asaas (para testes e validação)
-  const handleSimulateWebhook = async () => {
-    setIsSimulating(true);
-    try {
-      const res = await fetch('/api/asaas/simulate-confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser?.email,
-          uid: currentUser?.id,
-        }),
-      });
-
-      if (res.ok) {
-        // A escuta do Supabase / Realtime vai capturar e desbloquear na hora!
-        console.log('[Simulação] Webhook enviado ao servidor.');
-      } else {
-        // Ativação direta como fallback imediato
-        await activateSubscription();
-      }
-    } catch (err) {
-      await activateSubscription();
-    } finally {
-      setIsSimulating(false);
-    }
-  };
-
   const handleRenewTrial = async () => {
     setIsRenewingTrial(true);
     try {
@@ -202,7 +97,7 @@ export const SubscriptionBlockedView: React.FC = () => {
           </div>
           <h2 className="text-2xl font-black text-white">Pagamento Confirmado!</h2>
           <p className="text-sm text-slate-300">
-            Sua assinatura de <strong>R$ 26,99/mês</strong> foi ativada com sucesso pelo Asaas.
+            Sua assinatura de <strong>R$ 36,99/mês</strong> foi ativada com sucesso pelo Asaas.
           </p>
           <div className="pt-2">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs">
@@ -283,7 +178,7 @@ export const SubscriptionBlockedView: React.FC = () => {
           )}
 
           <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight mb-3 max-w-lg mx-auto">
-            Seu período de teste expirou! Ative sua assinatura de R$ 26,99 por mês para continuar.
+            Seu período de teste expirou! Ative sua assinatura de R$ 36,99 por mês para continuar.
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-400 mb-6 leading-relaxed max-w-md mx-auto">
@@ -302,7 +197,7 @@ export const SubscriptionBlockedView: React.FC = () => {
               <div className="text-right">
                 <span className="text-xs text-slate-400 line-through">R$ 49,90</span>
                 <div className="text-2xl font-black text-emerald-400">
-                  R$ 26,99<span className="text-xs font-normal text-slate-400">/mês</span>
+                  R$ 36,99<span className="text-xs font-normal text-slate-400">/mês</span>
                 </div>
               </div>
             </div>
@@ -327,16 +222,15 @@ export const SubscriptionBlockedView: React.FC = () => {
             </div>
           </div>
 
-          {/* 1. BOTÃO DE DESTAQUE: "PAGAR VIA PIX (R$ 26,99)" */}
+          {/* 1. BOTÃO DE DESTAQUE: "PAGAR VIA PIX (R$ 36,99)" */}
           <div className="space-y-3">
             <button
               type="button"
-              onClick={handleGeneratePix}
-              disabled={isGeneratingPix}
-              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-base shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer disabled:opacity-50"
+              onClick={handleDirectCheckout}
+              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-base shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2.5 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             >
               <QrIcon className="w-5 h-5 text-white" />
-              <span>{isGeneratingPix ? 'Gerando Pix Asaas...' : 'Pagar via Pix (R$ 26,99)'}</span>
+              <span>Pagar via Pix (R$ 36,99)</span>
               <ArrowRight className="w-5 h-5 ml-1" />
             </button>
 
@@ -388,122 +282,6 @@ export const SubscriptionBlockedView: React.FC = () => {
           <span>Escuta Supabase em Tempo Real</span>
         </div>
       </footer>
-
-      {/* 2. MODAL DE PAGAMENTO VIA PIX COM QR CODE E COPIA E COLA */}
-      {showPixModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-md rounded-3xl bg-slate-900 border border-slate-700 p-6 sm:p-7 shadow-2xl text-left space-y-4">
-            {/* Header do Modal */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <QrIcon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base text-white">Pagamento Pix Asaas</h3>
-                  <p className="text-xs text-emerald-400 font-semibold">Valor: R$ 26,99 (Mensalidade)</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPixModal(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Conteúdo do Pix */}
-            {isGeneratingPix ? (
-              <div className="py-12 text-center space-y-3">
-                <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-slate-300">Gerando cobrança Pix no Asaas...</p>
-              </div>
-            ) : pixData ? (
-              <div className="space-y-4 text-center">
-                {/* QR Code Container */}
-                <div className="p-3 bg-white rounded-2xl w-fit mx-auto shadow-lg ring-4 ring-emerald-500/20">
-                  <img
-                    src={pixData.qrCodeUrl}
-                    alt="QR Code Pix"
-                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain mx-auto"
-                  />
-                </div>
-
-                <p className="text-xs text-slate-300">
-                  Abra o aplicativo do seu banco, escolha <strong>Pix &gt; Ler QR Code</strong> ou copie o código abaixo:
-                </p>
-
-                {/* Código Pix Copia e Cola */}
-                <div className="space-y-1.5 text-left">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                    <span>Código Pix Copia e Cola</span>
-                    <span className="text-emerald-400 font-normal">Válido por 24h</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={pixData.pixCopiaECola}
-                      className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-slate-300 select-all overflow-hidden text-ellipsis focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyPix}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                        copied
-                          ? 'bg-emerald-500 text-slate-950'
-                          : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                      }`}
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copiado!' : 'Copiar'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Status em Tempo Real: Radar de Escuta */}
-                <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-left flex items-center gap-3">
-                  <div className="relative flex h-3 w-3 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
-                  </div>
-                  <div className="text-xs">
-                    <p className="font-bold text-emerald-300">Aguardando confirmação do Asaas...</p>
-                    <p className="text-[11px] text-slate-400">
-                      O Supabase está escutando o webhook em tempo real. Assim que o banco confirmar, seu acesso será liberado automaticamente sem precisar recarregar.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Botão de Teste / Simulação do Webhook (Apenas Master) */}
-                <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2">
-                  {isMaster ? (
-                    <button
-                      type="button"
-                      onClick={handleSimulateWebhook}
-                      disabled={isSimulating}
-                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                      title="Simula o evento PAYMENT_RECEIVED do Asaas no Supabase para validar a escuta"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
-                      <span>{isSimulating ? 'Confirmando...' : 'Simular Confirmação Asaas (Teste Master)'}</span>
-                    </button>
-                  ) : <div />}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPixModal(false)}
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
